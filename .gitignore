@@ -25,3 +25,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Chat session data (resumable conversations — local only)
+data/chats/

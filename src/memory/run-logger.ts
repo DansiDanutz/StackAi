@@ -102,6 +102,48 @@ export function logSoloRun(result: RunResult, task: string): string | null {
   return sink.appendNote(VAULT, `${BASE}/INDEX`, row + "\n");
 }
 
+/** Log a full chat session transcript to Obsidian. Returns the note path. */
+export function logChatSession(session: {
+  id: string; agent: string; title: string; startedAt: string; endedAt?: string;
+  messages: { role: "user" | "assistant"; text: string; agent: string; ts: string }[];
+  turnCount: number;
+}): string | null {
+  const sink = getObsidianSink();
+  if (!sink.enabled) return null;
+
+  const runDate = dateStamp();
+  const slug = session.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  const notePath = `${BASE}/Chats/${runDate.slice(0, 10)}-${slug || session.id.slice(0, 8)}`;
+  const duration = session.endedAt && session.startedAt
+    ? `${Math.round((new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()) / 1000)}s`
+    : "—";
+
+  const body = [
+    `**Session:** \`${session.id}\``,
+    `**Agent:** ${session.agent}`,
+    `**Turns:** ${session.turnCount}`,
+    `**Duration:** ${duration}`,
+    `**Started:** ${session.startedAt}`,
+    "",
+    "## Transcript",
+    "",
+    ...session.messages.map((m) => {
+      const who = m.role === "user" ? "🧑 **You**" : `🤖 **${m.agent}**`;
+      return `### ${who}  · ${m.ts.slice(11, 19)}\n\n${m.text}`;
+    }),
+    "",
+    `_Logged by Stack Ai OS · ${shortDate()}_`,
+  ].join("\n");
+
+  const written = sink.writeNote(VAULT, notePath, body, ["stack-ai-os", "chat"]);
+
+  if (written) {
+    const row = `- [[${notePath.slice(notePath.lastIndexOf("/") + 1)}|${runDate.slice(0, 16)}]] — chat ${session.agent} (${session.turnCount} turns) — ${truncate(firstLine(session.title), 50)}`;
+    sink.appendNote(VAULT, `${BASE}/INDEX`, row + "\n");
+  }
+  return written;
+}
+
 /** Log a learning (insight worth keeping) to the Learnings folder. */
 export function logLearning(title: string, content: string, tags: string[] = []): string | null {
   const sink = getObsidianSink();

@@ -17,6 +17,8 @@ export interface SoloOptions {
   verbosity?: RunRequest["verbosity"];
   cwd?: string;
   timeoutSec?: number;
+  /** Previous session id to resume (for agents with sessionResume capability). */
+  sessionId?: string;
   /** Optional event sink (TUI/web subscribe here for live updates). */
   onEvent?: (agent: AgentName, evt: AgentEvent) => void;
 }
@@ -36,6 +38,7 @@ export async function runSolo(
     verbosity: opts.verbosity ?? "stream-json",
     cwd: opts.cwd,
     timeoutSec: opts.timeoutSec ?? 600,
+    sessionId: opts.sessionId,
   };
 
   policy.validate(req); // throws on guardrail violation

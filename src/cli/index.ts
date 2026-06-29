@@ -29,6 +29,7 @@ async function main() {
 
   switch (cmd) {
     case "run": return cmdRun(args.slice(1));
+    case "chat": return cmdChat(args.slice(1));
     case "models": return cmdModels(args.slice(1));
     case "doctor": return cmdDoctor(args.slice(1));
     case "doctor-agent": return cmdDoctorAgent(args.slice(1));
@@ -261,6 +262,48 @@ function parseRunArgs(args: string[]): ParsedRun {
     else if (!a.startsWith("-") && !out.prompt) out.prompt = a;
   }
   return out;
+}
+
+// ---- chat (interactive REPL) ---------------------------------------------
+async function cmdChat(args: string[]) {
+  const { listSessions } = await import("../chat/history.js");
+
+  // --list: print saved sessions and exit.
+  if (args.includes("--list")) {
+    const sessions = listSessions();
+    if (!sessions.length) { console.log("No saved chat sessions."); return; }
+    console.log("Saved chat sessions:");
+    for (const s of sessions.slice(0, 20)) {
+      console.log(`  ${s.id.padEnd(22)} ${s.agent.padEnd(10)} ${s.startedAt.slice(0, 16)} — ${s.title.slice(0, 50)} (${s.messageCount} msgs)`);
+    }
+    console.log("\nResume: stackai chat --resume <id>");
+    return;
+  }
+
+  if (!process.stdin.isTTY && !process.env.STACKAI_CHAT_FORCE) {
+    stderr.write("Chat requires an interactive terminal.\n");
+    exit(1);
+  }
+
+  // Parse flags.
+  const agent = (args.includes("--agent") ? args[args.indexOf("--agent") + 1] : "codex") as AgentName;
+  const model = args.includes("--model") ? args[args.indexOf("--model") + 1] : undefined;
+  const cwd = args.includes("--cwd") ? args[args.indexOf("--cwd") + 1] : undefined;
+  const resumeId = args.includes("--resume") ? args[args.indexOf("--resume") + 1] : undefined;
+
+  const cfg = loadConfig();
+  const registry = createRegistry(cfg);
+  const router = new ModelRouterImpl(cfg.models);
+  const policy = defaultPolicy();
+
+  // Verify the agent exists.
+  if (!registry.get(agent)) {
+    stderr.write(`Unknown agent: ${agent}. Run 'stackai adapters list' for options.\n`);
+    exit(1);
+  }
+
+  const { startChatRepl } = await import("../chat/repl.js");
+  await startChatRepl({ registry, router, policy, agent, model, cwd, resumeId });
 }
 
 // ---- models --------------------------------------------------------------
@@ -736,6 +779,7 @@ function usage(code: number) {
 
 Usage:
   stackai run "<task>" [--pattern ensemble] [--agent claude] [--judge fugu] [--model sonnet] [--cwd .] [--full-auto] [--text]
+  stackai chat [--agent codex] [--model sonnet] [--resume <id>] [--list]   # interactive chat with history
   stackai models [--agent <name>]
   stackai doctor                          # probe all adapters
   stackai doctor-agent <name>             # smoke-test one adapter
