@@ -163,6 +163,7 @@ CLI / TUI / Web ──▶ KERNEL (scheduler · loop-engine · safety) ──▶ 
 
 ## Documentation
 
+- **[docs/AUTH.md](docs/AUTH.md)** — **authenticate your agents** (claude/codex/gemini/cline/deepseek/jcode). The one thing standing between you and a fully-live fleet.
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — system structure, core abstractions, the adapter/kernel/patterns/MCP design, ADRs, module reference.
 - **[docs/DATA-FLOW.md](docs/DATA-FLOW.md)** — worked examples tracing solo/ACP/ensemble/MCP-recall/secure-key operations through every layer.
 - **[docs/RESEARCH.md](docs/RESEARCH.md)** — OSS leverage analysis (ACP, Open Multi-Agent, Sakana Fugu).
