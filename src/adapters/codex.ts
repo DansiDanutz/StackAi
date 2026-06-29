@@ -70,7 +70,11 @@ export class CodexAdapter extends BaseAdapter {
     // Positional prompt last. `-` reads from stdin; a literal arg is fine too.
     args.push(req.prompt);
 
-    return { cmd: this.cfg.command, args, env: {} };
+    // Strip OPENAI_API_KEY so codex deterministically uses its ChatGPT OAuth
+    // login. When both are present, codex shows "mixed auth signals" (per
+    // `codex doctor`) and intermittently 401s because it sometimes picks the env
+    // key (wrong/expired account) over the OAuth token. Empty string = unset.
+    return { cmd: this.cfg.command, args, env: { OPENAI_API_KEY: "" } };
   }
 
   /**

@@ -108,7 +108,13 @@ export abstract class BaseAdapter implements AgentAdapter {
     // authenticate regardless of the caller's shell env (the daemon/CLI may run
     // without the user's exported keys). Only keys already in process.env OR the
     // vault are added; never invents keys.
-    const childEnv = { ...process.env, ...injectVaultKeys(), ...env };
+    // An adapter may set env[key] = "" to mean "UNSET this in the child" — used
+    // to resolve auth conflicts (e.g. codex: strip OPENAI_API_KEY so it uses its
+    // ChatGPT OAuth login instead of a conflicting env key).
+    const childEnv: NodeJS.ProcessEnv = { ...process.env, ...injectVaultKeys(), ...env };
+    for (const k of Object.keys(childEnv)) {
+      if (childEnv[k] === "") delete childEnv[k];
+    }
 
     const child = spawn(cmd, args, {
       cwd: req.cwd ?? process.cwd(),
