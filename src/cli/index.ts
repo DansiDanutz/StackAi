@@ -38,6 +38,7 @@ async function main() {
     case "runs": return cmdRuns(args.slice(1));
     case "recall": return cmdRecall(args.slice(1));
     case "serve": return cmdServe(args.slice(1));
+    case "mcp": return cmdMcp(args.slice(1));
     case "vault": return cmdVault(args.slice(1));
     default:
       stderr.write(`Unknown command: ${cmd}\n`);
@@ -349,6 +350,49 @@ async function probe(a: ReturnType<ReturnType<typeof createRegistry>["enabled"]>
   }
 }
 
+// ---- mcp (two-way bus) ---------------------------------------------------
+async function cmdMcp(args: string[]) {
+  const sub = args[0];
+  if (sub === "serve") {
+    // Run Stack Ai OS as an MCP server over stdio. Any MCP-capable CLI connects
+    // via its --mcp-config flag pointed at `stackai mcp config` output.
+    const { startMcpServer } = await import("../mcp/server.js");
+    startMcpServer();
+    return; // long-running over stdio
+  }
+  if (sub === "config") {
+    // Print a JSON snippet a CLI can use to connect to the Stack Ai OS MCP server.
+    const { stackAiOsMcpSnippet } = await import("../mcp/client.js");
+    console.log(JSON.stringify({ mcpServers: stackAiOsMcpSnippet() }, null, 2));
+    return;
+  }
+  if (sub === "inject") {
+    // Show what servers would be injected into a given agent's run.
+    const agent = (args[1] ?? "claude") as AgentName;
+    const cfg = loadConfig();
+    const registry = createRegistry(cfg);
+    const a = registry.get(agent);
+    if (!a) { stderr.write(`No such adapter: ${agent}\n`); exit(1); }
+    const { resolveInjectableServers } = await import("../mcp/client.js");
+    const servers = resolveInjectableServers(agent, a.capabilities);
+    if (!Object.keys(servers).length) {
+      console.log(`No MCP servers injected for '${agent}' (mcpClient=${a.capabilities.mcpClient}).`);
+      return;
+    }
+    console.log(`MCP servers injected into '${agent}':`);
+    for (const [name, entry] of Object.entries(servers)) {
+      const loc = entry.url ?? `${entry.command} ${(entry.args ?? []).join(" ")}`;
+      console.log(`  ${name.padEnd(18)} ${loc}`);
+    }
+    return;
+  }
+  stderr.write("Usage: stackai mcp {serve|config|inject <agent>}\n");
+  stderr.write("  serve    — run Stack Ai OS as an MCP server (for CLIs to call back)\n");
+  stderr.write("  config   — print the mcp-config snippet for CLIs\n");
+  stderr.write("  inject <agent> — show which servers an agent receives\n");
+  exit(1);
+}
+
 // ---- serve (web dashboard) ----------------------------------------------
 async function cmdServe(args: string[]) {
   const { startServer } = await import("../web/server.js");
@@ -549,6 +593,9 @@ Usage:
   stackai runs [show <id>]               # run history from the store
   stackai recall "<query>" [--code path] # query claude-mem + openclaw + graphify
   stackai serve [--port N] [--tailnet]   # web dashboard (default :42719)
+  stackai mcp serve                      # run as MCP server (CLIs call back into the OS)
+  stackai mcp config                     # print mcp-config snippet for CLIs
+  stackai mcp inject <agent>             # show servers injected into an agent
   stackai vault set <KEY> [value|stdin]   # store in macOS Keychain (encrypted)
   stackai vault get <KEY>
   stackai vault list
