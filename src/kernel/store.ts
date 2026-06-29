@@ -14,7 +14,18 @@ import path from "node:path";
 import { CONFIG_DIR } from "../config.js";
 
 type DatabaseSync = import("node:sqlite").DatabaseSync;
-const SQLiteCtor: Promise<any> = import(/* @vite-ignore */ "node:sqlite").then((m) => m.DatabaseSync);
+// Lazily import the experimental node:sqlite builtin. The .catch() swallows the
+// vite/vitest resolution rejection (vite can't transform node: builtins); under
+// real Node (production + the tsx integration test) it resolves fine.
+let SQLiteCtorPromise: Promise<any> | null = null;
+function loadSQLite(): Promise<any> {
+  if (!SQLiteCtorPromise) {
+    SQLiteCtorPromise = import(/* @vite-ignore */ "node:sqlite")
+      .then((m) => m.DatabaseSync)
+      .catch(() => { throw new Error("node:sqlite unavailable (requires Node 24+)"); });
+  }
+  return SQLiteCtorPromise;
+}
 import type { AgentName, RunResult } from "../types.js";
 
 const DATA_DIR = process.env.STACKAI_DATA_DIR ?? path.resolve(CONFIG_DIR, "..", "data");
@@ -24,7 +35,7 @@ let _db: DatabaseSync | null = null;
 
 async function db(): Promise<DatabaseSync> {
   if (_db) return _db;
-  const DatabaseSync = await SQLiteCtor;
+  const DatabaseSync = await loadSQLite();
   mkdirSync(DATA_DIR, { recursive: true });
   const d = new DatabaseSync(DB_PATH);
   d.exec(`

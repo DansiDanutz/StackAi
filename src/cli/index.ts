@@ -70,6 +70,15 @@ async function cmdRun(args: string[]) {
   if (preset && preset.kind === "ensemble") {
     return runEnsembleCLI(parsed, preset, cfg, registry, router, policy);
   }
+  if (preset && preset.kind === "pipeline") {
+    return runPipelineCLI(parsed, preset, cfg, registry, router, policy);
+  }
+  if (preset && preset.kind === "debate") {
+    return runDebateCLI(parsed, preset, cfg, registry, router, policy);
+  }
+  if (preset && preset.kind === "divide-and-conquer" || preset?.kind === "divide") {
+    return runDivideCLI(parsed, preset, cfg, registry, router, policy);
+  }
 
   // Solo (default).
   const agent = (parsed.agent ?? preset?.agents?.[0] ?? "claude") as AgentName;
@@ -127,6 +136,93 @@ async function runEnsembleCLI(parsed: ParsedRun, preset: any, cfg: any, registry
     stdout.write("\n" + result.winner.result.finalText + "\n");
   }
   exit(0);
+}
+
+async function runPipelineCLI(parsed: ParsedRun, preset: any, cfg: any, registry: any, router: any, policy: any) {
+  const { Scheduler } = await import("../kernel/scheduler.js");
+  const { runPipeline } = await import("../patterns/pipeline.js");
+  const scheduler = new Scheduler(policy, { concurrency: 1 }); // pipeline is sequential
+  const agents = (parsed.agents ?? preset.agents ?? ["claude", "codex"]) as AgentName[];
+  const render = makeLiveRenderer(stdout, { quiet: parsed.quiet });
+
+  const result = await runPipeline(registry, router, scheduler, policy, {
+    task: parsed.prompt!,
+    agents,
+    model: parsed.model ?? preset.model,
+    timeoutSec: preset.timeoutSec,
+    cwd: parsed.cwd,
+    posture: parsed.fullAuto ? "full-auto" : undefined,
+    onEvent: (_stage, _agent, evt) => render(evt),
+    onStage: (stage, output) => {
+      stdout.write(`\n── pipeline stage: ${stage} (${output.length} chars) ──\n`);
+    },
+  });
+
+  stdout.write(`\n── pipeline ${result.status} ──\n`);
+  stdout.write(`  run:    ${result.runId}\n`);
+  stdout.write(`  stages: ${result.stages.map((s) => s.name).join(" → ")}\n`);
+  stdout.write(`  time:   ${(result.totalDurationMs / 1000).toFixed(1)}s\n`);
+  if (parsed.quiet && result.finalOutput) stdout.write("\n" + result.finalOutput + "\n");
+  exit(result.status === "failed" ? 1 : 0);
+}
+
+async function runDebateCLI(parsed: ParsedRun, preset: any, cfg: any, registry: any, router: any, policy: any) {
+  const { Scheduler } = await import("../kernel/scheduler.js");
+  const { runDebate } = await import("../patterns/debate.js");
+  const scheduler = new Scheduler(policy, { concurrency: 2 });
+  const proposer = (parsed.agents?.[0] ?? preset.proposer ?? "claude") as AgentName;
+  const critic = (parsed.agents?.[1] ?? preset.critic ?? "codex") as AgentName;
+  const render = makeLiveRenderer(stdout, { quiet: parsed.quiet });
+
+  const result = await runDebate(registry, router, scheduler, policy, {
+    task: parsed.prompt!,
+    proposer, critic,
+    model: parsed.model ?? preset.model,
+    maxRounds: preset.maxRounds ?? 3,
+    timeoutSec: preset.timeoutSec,
+    cwd: parsed.cwd,
+    posture: parsed.fullAuto ? "full-auto" : undefined,
+    onEvent: (_role, _agent, evt) => render(evt),
+    onRound: (round, proposal, critique, converged) => {
+      stdout.write(`\n── debate round ${round + 1} ${converged ? "(converged)" : ""} ──\n`);
+      stdout.write(`  critique: ${critique.slice(0, 120)}…\n`);
+    },
+  });
+
+  stdout.write(`\n── debate ${result.status} ──\n`);
+  stdout.write(`  run:       ${result.runId}\n`);
+  stdout.write(`  rounds:    ${result.rounds}\n`);
+  stdout.write(`  converged: ${result.converged}\n`);
+  if (result.verdict) stdout.write(`  judge:     action=${result.verdict.action}\n`);
+  if (parsed.quiet && result.proposal) stdout.write("\n" + result.proposal + "\n");
+  exit(result.status === "failed" ? 1 : 0);
+}
+
+async function runDivideCLI(parsed: ParsedRun, preset: any, cfg: any, registry: any, router: any, policy: any) {
+  const { Scheduler } = await import("../kernel/scheduler.js");
+  const { runDivideConquer } = await import("../patterns/divide.js");
+  const scheduler = new Scheduler(policy, { concurrency: 4 });
+  const workers = (parsed.agents ?? preset.agents ?? ["claude", "codex", "gemini"]) as AgentName[];
+  const render = makeLiveRenderer(stdout, { quiet: parsed.quiet });
+
+  const result = await runDivideConquer(registry, router, scheduler, policy, {
+    task: parsed.prompt!,
+    workers,
+    model: parsed.model ?? preset.model,
+    timeoutSec: preset.timeoutSec,
+    cwd: parsed.cwd,
+    posture: parsed.fullAuto ? "full-auto" : undefined,
+    onEvent: (_phase, _agent, evt) => render(evt),
+    onPhase: (phase, detail) => stdout.write(`\n── divide: ${phase} — ${detail} ──\n`),
+  });
+
+  stdout.write(`\n── divide-and-conquer ${result.status} ──\n`);
+  stdout.write(`  run:      ${result.runId}\n`);
+  stdout.write(`  subtasks: ${result.subtasks.length}\n`);
+  stdout.write(`  partials: ${result.partialResults.length}\n`);
+  stdout.write(`  time:     ${(result.totalDurationMs / 1000).toFixed(1)}s\n`);
+  if (parsed.quiet && result.mergedOutput) stdout.write("\n" + result.mergedOutput + "\n");
+  exit(result.status === "failed" ? 1 : 0);
 }
 
 type ParsedRun = { prompt?: string; agent?: string; agents?: string[]; model?: string; judge?: string; pattern?: string; cwd?: string; fullAuto?: boolean; text?: boolean; quiet?: boolean };

@@ -54,3 +54,16 @@ patterns:
     agents: [claude, codex]
     model: auto
     timeoutSec: 1200
+
+  - name: debate
+    kind: debate
+    agents: [claude, codex]
+    model: auto
+    maxRounds: 3
+    timeoutSec: 900
+
+  - name: divide
+    kind: divide-and-conquer
+    agents: [claude, codex, gemini]
+    model: auto
+    timeoutSec: 900
