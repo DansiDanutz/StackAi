@@ -1,5 +1,7 @@
 # Stack Ai OS
 
+![CI](https://github.com/DansiDanutz/StackAi/actions/workflows/ci.yml/badge.svg)
+
 A local operating system that treats your AI coding CLIs as schedulable "processes,"
 runs them in collaborative loops (ensemble → judge → refine), and lets you drive
 the whole thing from a CLI (TUI + web dashboard coming). You set the model per
