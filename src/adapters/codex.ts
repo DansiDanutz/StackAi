@@ -84,6 +84,12 @@ export class CodexAdapter extends BaseAdapter {
     const t = e.type ?? e.msg_type;
 
     switch (t) {
+      case "thread.started":
+        return { type: "system", subtype: "init", message: `thread ${e.thread_id ?? ""}` };
+
+      case "turn.started":
+        return null;
+
       case "session_created":
         return {
           type: "system",
@@ -113,8 +119,7 @@ export class CodexAdapter extends BaseAdapter {
           input: e.payload?.arguments ?? e.arguments,
         };
 
-      case "function_call_output":
-      case "item_completed": {
+      case "function_call_output": {
         if (e.payload?.output != null) {
           return {
             type: "tool_result",
@@ -124,6 +129,30 @@ export class CodexAdapter extends BaseAdapter {
         }
         return null;
       }
+
+      // Codex stream-json: {"type":"item.completed","item":{...}}
+      case "item.completed":
+      case "item_completed": {
+        const item = e.item ?? e.payload;
+        if (!item) return null;
+        if (item.type === "agent_message" && item.text) {
+          return { type: "assistant", subtype: "text", text: String(item.text) };
+        }
+        if (item.type === "tool_call" || item.type === "function_call") {
+          return { type: "tool_use", id: String(item.id ?? ""), name: String(item.name ?? ""), input: item.arguments ?? item.input };
+        }
+        if (item.type === "tool_call_output" || item.output != null) {
+          return { type: "tool_result", id: String(item.id ?? ""), content: String(item.output ?? "").slice(0, 4000) };
+        }
+        if (item.type === "error") {
+          return { type: "error", message: String(item.message ?? "codex error"), recoverable: false };
+        }
+        return null;
+      }
+
+      case "turn.completed":
+      case "turn_completed":
+        return { type: "done", exitCode: 0, finalText: "" };
 
       case "token_count":
         return {
