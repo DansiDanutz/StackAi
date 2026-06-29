@@ -1,0 +1,56 @@
+# Stack Ai OS — named pattern presets
+# Invoke with: stackai run "<task>" --pattern <name>
+
+patterns:
+  - name: default
+    kind: solo
+    model: auto
+    timeoutSec: 600
+
+  - name: solo
+    kind: solo
+    model: auto
+    timeoutSec: 600
+
+  - name: ensemble
+    kind: ensemble
+    agents: [claude, codex, gemini]
+    judge: claude
+    model: auto
+    width: 3
+    maxIterations: 2
+    budgetUsd: 1.00
+    timeoutSec: 900
+    posture: cautious
+
+  - name: ensemble-fast
+    kind: ensemble
+    agents: [codex, gemini]
+    judge: codex
+    model: auto
+    width: 2
+    maxIterations: 1
+    budgetUsd: 0.50
+    timeoutSec: 600
+
+  - name: deep
+    kind: ensemble
+    agents: [claude, codex, gemini, openclaude]
+    judge: claude
+    model: opus
+    width: 4
+    maxIterations: 3
+    budgetUsd: 3.00
+    timeoutSec: 1800
+
+  - name: judge
+    kind: judge
+    agent: claude
+    model: opus
+    timeoutSec: 300
+
+  - name: pipeline
+    kind: pipeline
+    agents: [claude, codex]
+    model: auto
+    timeoutSec: 1200

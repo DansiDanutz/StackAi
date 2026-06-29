@@ -1,0 +1,30 @@
+{
+  "name": "stack-ai-os",
+  "version": "0.1.0",
+  "description": "A local operating system that orchestrates your 9 AI coding CLIs to collaborate in loops and produce the best result.",
+  "type": "module",
+  "bin": {
+    "stackai": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "stackai": "tsx src/cli/index.ts",
+    "doctor": "tsx src/cli/index.ts doctor",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

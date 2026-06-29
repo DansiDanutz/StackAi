@@ -1,0 +1,59 @@
+# Stack Ai OS — model alias registry
+# One alias resolves to a per-CLI model id, so `--model sonnet` works no matter
+# which agents a pattern selects. Pin an agent+model with `agent:model` (e.g. codex:gpt5).
+
+models:
+  - alias: sonnet
+    providers:
+      claude: claude-sonnet-4-6
+      openclaude: claude-sonnet-4-6
+      kimi: claude-sonnet-4-6
+      opencode: anthropic/claude-sonnet-4
+      hermes: anthropic/claude-sonnet-4
+
+  - alias: opus
+    providers:
+      claude: claude-opus-4-6
+      openclaude: claude-opus-4-6
+      kimi: claude-opus-4-6
+      opencode: anthropic/claude-opus-4
+
+  - alias: gpt5
+    providers:
+      codex: gpt-5-codex
+
+  - alias: gemini-pro
+    providers:
+      gemini: gemini-3-pro
+
+  - alias: kimi-latest
+    providers:
+      kimi: kimi-latest
+
+  - alias: kimi-code
+    providers:
+      kimi: kimi-k2.7-code
+
+  - alias: qwen-local
+    providers:
+      pi: "qwen3:8b"
+      openclaude: qwen3-8b
+
+  - alias: qwen-coder
+    providers:
+      openclaude: qwen3-coder-480b
+
+# Per-pattern defaults. `auto` = each agent uses its own defaultModel.
+defaults:
+  solo:
+    model: auto
+  ensemble:
+    agents: [claude, codex, gemini]
+    model: auto
+    judge: claude
+  judge:
+    agent: claude
+    model: opus
+  pipeline:
+    agents: [claude, codex]
+    model: auto

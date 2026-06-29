@@ -1,0 +1,44 @@
+agents:
+  - name: claude
+    command: /Users/davidai/.local/bin/claude
+    defaultModel: sonnet
+    enabled: true
+  - name: codex
+    command: /Users/davidai/.npm-global/bin/codex
+    prefixArgs:
+      - exec
+    defaultModel: gpt5
+    enabled: true
+  - name: opencode
+    command: /Users/davidai/.npm-global/bin/opencode
+    prefixArgs:
+      - run
+    defaultModel: sonnet
+    enabled: true
+  - name: gemini
+    command: /opt/homebrew/bin/gemini
+    defaultModel: gemini-pro
+    enabled: true
+  - name: kimi
+    command: /Users/davidai/.local/bin/kimi
+    defaultModel: kimi-latest
+    enabled: true
+  - name: openclaude
+    command: /Users/davidai/.npm-global/lib/node_modules/@gitlawb/openclaude/dist/cli.mjs
+    prefixArgs: []
+    nodeRun: true
+    defaultModel: sonnet
+    enabled: true
+  - name: pi
+    command: /Users/davidai/.npm-global/bin/pi
+    defaultModel: qwen-local
+    enabled: true
+  - name: hermes
+    command: /Users/davidai/.local/bin/hermes
+    defaultModel: sonnet
+    enabled: true
+  - name: zcode
+    command: /Applications/ZCode.app/Contents/Resources/glm/zcode.cjs
+    nodeRun: true
+    defaultModel: auto
+    enabled: true

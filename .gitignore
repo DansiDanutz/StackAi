@@ -1,0 +1,27 @@
+# Stack Ai OS — dependencies & build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Secrets — NEVER commit (the repo is public)
+.env
+.env.*
+secrets/
+config/secrets.yaml
+*.secret
+*.key
+!*.example
+
+# Local data (run store, artifacts) — keep git clean, regenerable
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+data/run-store.sqlite*
+data/artifacts/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
