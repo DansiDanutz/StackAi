@@ -86,6 +86,41 @@ export function startServer(opts: ServerOptions = {}): http.Server {
         return json(res, { peers });
       }
 
+      if (path === "/api/stats") {
+        const runs = await store.listRuns(200);
+        const totalSpent = runs.reduce((s, r) => s + (r.spentUsd ?? 0), 0);
+        const byPattern: Record<string, number> = {};
+        const byStatus: Record<string, number> = {};
+        const winRate: Record<string, { wins: number; runs: number }> = {};
+        const spendOverTime: { ts: string; spent: number }[] = [];
+        for (const r of runs) {
+          byPattern[r.pattern] = (byPattern[r.pattern] ?? 0) + 1;
+          byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
+          if (r.winnerAgent) {
+            winRate[r.winnerAgent] = winRate[r.winnerAgent] ?? { wins: 0, runs: 0 };
+            winRate[r.winnerAgent]!.wins += 1;
+          }
+          // Track all agents that participated (approx: by pattern agents in meta).
+          if (r.spentUsd) spendOverTime.push({ ts: r.ts, spent: r.spentUsd });
+        }
+        const winRatePct = Object.fromEntries(
+          Object.entries(winRate).map(([k, v]) => [k, Math.round((v.wins / Math.max(1, runs.filter(r => r.winnerAgent).length)) * 100)])
+        );
+        return json(res, {
+          totalRuns: runs.length,
+          totalSpent,
+          byPattern,
+          byStatus,
+          winRate: winRatePct,
+          spendOverTime: spendOverTime.slice(-30),
+        });
+      }
+
+      if (path === "/api/config/agents") {
+        const cfg = loadConfig();
+        return json(res, { agents: cfg.agents.agents.map((a) => ({ name: a.name, command: a.command, enabled: a.enabled, defaultModel: a.defaultModel, dynamic: a.dynamic })) });
+      }
+
       return json(res, { error: "not found", path }, 404);
     } catch (e) {
       return json(res, { error: (e as Error).message }, 500);

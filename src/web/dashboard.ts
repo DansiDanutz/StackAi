@@ -74,6 +74,8 @@ export const dashboardHtml = `<!DOCTYPE html>
     <button data-tab="fleet">Fleet</button>
     <button data-tab="models">Models</button>
     <button data-tab="runs">Runs</button>
+    <button data-tab="stats">Stats</button>
+    <button data-tab="config">Config</button>
     <button data-tab="tailnet">Tailnet</button>
     <button data-tab="live">Live</button>
   </nav>
@@ -91,6 +93,10 @@ export const dashboardHtml = `<!DOCTYPE html>
   <section class="tab" id="models"><div id="models-table"></div></section>
   <!-- RUNS -->
   <section class="tab" id="runs"><div id="runs-table"></div></section>
+  <!-- STATS -->
+  <section class="tab" id="stats"><div id="stats-content"></div></section>
+  <!-- CONFIG -->
+  <section class="tab" id="config"><div id="config-content"></div></section>
   <!-- TAILNET -->
   <section class="tab" id="tailnet"><div id="tailnet-table"></div></section>
   <!-- LIVE -->
@@ -110,7 +116,9 @@ function esc(s){ return String(s??'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt
 // tabs
 document.querySelectorAll('nav button').forEach(b=>{
   b.onclick=()=>{ document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); $(b.dataset.tab).classList.add('active'); if(b.dataset.tab==='runs')loadRuns(); if(b.dataset.tab==='tailnet')loadTailnet(); };
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); $(b.dataset.tab).classList.add('active');
+    if(b.dataset.tab==='runs')loadRuns(); if(b.dataset.tab==='tailnet')loadTailnet();
+    if(b.dataset.tab==='stats')loadStats(); if(b.dataset.tab==='config')loadConfig(); };
 });
 
 async function loadOverview(){
@@ -176,6 +184,43 @@ async function loadTailnet(){
     }).join('');
     $('tailnet-table').innerHTML = '<table><thead><tr><th>Host</th><th>Tailnet IP</th><th>User</th><th>OS</th><th>State</th></tr></thead><tbody>'+rows+'</tbody></table>'+(rows?'':'<div class="empty">No Tailscale peers (or tailscale unavailable).</div>');
   }catch(e){ $('tailnet-table').innerHTML='<div class="empty">Tailscale query failed.</div>'; }
+}
+
+async function loadStats(){
+  try{
+    const s = await get('/api/stats');
+    const winRows = Object.entries(s.winRate||{}).sort((a,b)=>b[1]-a[1]).map(([a,p])=>
+      '<tr><td>'+esc(a)+'</td><td><div class="score-bar"><div class="score-fill" style="width:'+p+'%"></div></div></td><td>'+p+'%</td></tr>').join('');
+    const patRows = Object.entries(s.byPattern||{}).map(([p,n])=>'<span class="badge blue">'+esc(p)+' '+n+'</span>').join(' ');
+    const stRows = Object.entries(s.byStatus||{}).map(([p,n])=>'<span class="badge '+(p==='done'?'green':p==='failed'?'red':'yellow')+'">'+esc(p)+' '+n+'</span>').join(' ');
+    const spark = (s.spendOverTime||[]).map(x=>x.spent).join(',');
+    $('stats-content').innerHTML =
+      '<div class="grid cards" style="margin-bottom:16px">'+
+        card('Total runs', s.totalRuns||0, 'accent')+
+        card('Total spend', '$'+(s.totalSpent||0).toFixed(3), 'green')+
+        card('Patterns', Object.keys(s.byPattern||{}).length, '')+
+      '</div>'+
+      '<h2 style="font-size:14px;color:var(--dim);margin:16px 0 8px">By pattern</h2><div>'+patRows+'</div>'+
+      '<h2 style="font-size:14px;color:var(--dim);margin:16px 0 8px">By status</h2><div>'+stRows+'</div>'+
+      '<h2 style="font-size:14px;color:var(--dim);margin:16px 0 8px">Win rate by agent</h2>'+
+      '<table><thead><tr><th>Agent</th><th>Win share</th><th>%</th></tr></thead><tbody>'+(winRows||'<tr><td colspan=3 class=empty>no winners yet</td></tr>')+'</tbody></table>'+
+      (spark?'<h2 style="font-size:14px;color:var(--dim);margin:16px 0 8px">Spend trend (last '+s.spendOverTime.length+' runs)</h2><div class=mono>'+esc(spark)+'</div>':'');
+  }catch(e){ $('stats-content').innerHTML='<div class=empty>stats load failed</div>'; }
+}
+
+async function loadConfig(){
+  try{
+    const [a,m] = await Promise.all([get('/api/config/agents'),get('/api/models')]);
+    const agentRows=(a.agents||[]).map(x=>'<tr><td><b>'+esc(x.name)+'</b>'+(x.dynamic?' <span class="badge purple">dynamic</span>':'')+'</td><td class="mono">'+esc(x.command)+'</td><td>'+(x.enabled?'<span class="badge green">on</span>':'<span class="badge dim">off</span>')+'</td><td class="mono">'+esc(x.defaultModel||'—')+'</td></tr>').join('');
+    const agents2=[...new Set((m.aliases||[]).flatMap(a=>Object.keys(a.providers||{})))];
+    const modelRows=(m.aliases||[]).map(al=>'<tr><td class="mono">'+esc(al.alias)+'</td>'+agents2.map(ag=>'<td>'+(al.providers?.[ag]?'<span class="mono">'+esc(al.providers[ag])+'</span>':'<span class="badge dim">—</span>')+'</td>').join('')+'</tr>').join('');
+    $('config-content').innerHTML =
+      '<p style="color:var(--dim);margin-bottom:12px">Read-only view. Edit <code>config/agents.yaml</code> and <code>config/models.yaml</code> then restart.</p>'+
+      '<h2 style="font-size:14px;color:var(--dim);margin:0 0 8px">Agents</h2>'+
+      '<table><thead><tr><th>Name</th><th>Command</th><th>Enabled</th><th>Default model</th></tr></thead><tbody>'+agentRows+'</tbody></table>'+
+      '<h2 style="font-size:14px;color:var(--dim);margin:16px 0 8px">Model aliases</h2>'+
+      '<table><thead><tr><th>alias</th>'+agents2.map(a=>'<th>'+esc(a)+'</th>').join('')+'</tr></thead><tbody>'+modelRows+'</tbody></table>';
+  }catch(e){ $('config-content').innerHTML='<div class=empty>config load failed</div>'; }
 }
 
 // WebSocket live events
