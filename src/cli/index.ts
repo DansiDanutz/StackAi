@@ -93,6 +93,22 @@ async function cmdRun(args: string[]) {
     cwd: parsed.cwd,
     onEvent: (_agent, evt) => render(evt),
   }, policy);
+
+  // Persist solo runs to the store + Obsidian (lightweight: a store row + an
+  // INDEX line). Non-blocking; never breaks a run.
+  try {
+    const { createRun, updateRun } = await import("../kernel/store.js");
+    const { logSoloRun } = await import("../memory/run-logger.js");
+    const runId = await createRun("solo", parsed.prompt, { cwd: parsed.cwd });
+    await updateRun(runId, {
+      status: result.exitCode === 0 ? "done" : "failed",
+      winnerAgent: result.agent,
+      winnerText: result.finalText.slice(0, 2000),
+      iterations: 0,
+    });
+    logSoloRun(result, parsed.prompt);
+  } catch { /* persistence is best-effort */ }
+
   exit(result.exitCode || (result.timedOut ? 124 : 0));
 }
 
@@ -424,8 +440,12 @@ async function cmdDoctorAgent(args: string[]) {
 async function probe(a: ReturnType<ReturnType<typeof createRegistry>["enabled"]>[number] | undefined, quiet: boolean): Promise<boolean> {
   if (!a) return false;
   process.stdout.write(`  ${a.name.padEnd(14)} `);
+  // Cloud adapters (fugu) have no local binary — report specially, not as failure.
+  if ((a as any).isCloud) {
+    console.log(`☁ ${a.displayName} ${C_GRAY}(cloud — no binary)`);
+    return true;
+  }
   try {
-    // Build a trivial command (don't actually call the LLM) and check the binary exists.
     const { cmd } = a.buildCommand(
       { agent: a.name, prompt: "OK", verbosity: "text" } as never,
       { resolve: () => undefined, aliases: () => [] }
@@ -433,7 +453,6 @@ async function probe(a: ReturnType<ReturnType<typeof createRegistry>["enabled"]>
     const { existsSync } = await import("node:fs");
     const baseCmd = cmd === "node" ? "/usr/bin/env" : cmd;
     if (!existsSync(baseCmd) && !baseCmd.startsWith("/usr/bin")) {
-      // fallback: check PATH
       const { execSync } = await import("node:child_process");
       try { execSync(`command -v ${baseCmd}`, { stdio: "ignore" }); }
       catch { throw new Error(`binary not found: ${baseCmd}`); }
@@ -446,6 +465,7 @@ async function probe(a: ReturnType<ReturnType<typeof createRegistry>["enabled"]>
     return false;
   }
 }
+const C_GRAY = "\x1b[90m";
 
 // ---- tui (terminal interface) -------------------------------------------
 async function cmdTui(_args: string[]) {

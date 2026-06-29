@@ -179,7 +179,14 @@ export async function recordCandidate(runId: string, iteration: number, result: 
 }
 
 export async function getRun(id: string): Promise<RunRecord | undefined> {
-  const row = (await db()).prepare("SELECT * FROM runs WHERE id = ?").get(id) as Record<string, any> | undefined;
+  const d = await db();
+  // Exact match first; fall back to prefix match (so short ids from `runs` list work).
+  let row = d.prepare("SELECT * FROM runs WHERE id = ?").get(id) as Record<string, any> | undefined;
+  if (!row) {
+    const matches = d.prepare("SELECT * FROM runs WHERE id LIKE ? || '%'").all(id) as Record<string, any>[];
+    if (matches.length === 1) row = matches[0];
+    else if (matches.length > 1) throw new Error(`ambiguous run id '${id}' — matches ${matches.length} runs`);
+  }
   if (!row) return undefined;
   return rowToRun(row);
 }
