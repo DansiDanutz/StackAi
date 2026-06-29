@@ -40,6 +40,7 @@ async function main() {
     case "serve": return cmdServe(args.slice(1));
     case "mcp": return cmdMcp(args.slice(1));
     case "tui": return cmdTui(args.slice(1));
+    case "mlx": return cmdMlx(args.slice(1));
     case "vault": return cmdVault(args.slice(1));
     default:
       stderr.write(`Unknown command: ${cmd}\n`);
@@ -466,6 +467,36 @@ async function probe(a: ReturnType<ReturnType<typeof createRegistry>["enabled"]>
   }
 }
 const C_GRAY = "\x1b[90m";
+
+// ---- mlx (local model server control) -----------------------------------
+async function cmdMlx(args: string[]) {
+  const mlx = await import("../models/vllm-mlx.js");
+  const sub = args[0];
+  if (sub === "serve" || sub === "start") {
+    const modelFlag = args.indexOf("--model");
+    const model = modelFlag >= 0 ? args[modelFlag + 1] : undefined;
+    try {
+      const pid = mlx.startVllmMlx({ model });
+      console.log(`✓ vllm-mlx started (pid ${pid}) — model ${model ?? mlx.VLLM_MLX_DEFAULT_MODEL} on :${mlx.VLLM_MLX_DEFAULT_PORT}`);
+      console.log(`  OpenAI-compatible API at http://127.0.0.1:${mlx.VLLM_MLX_DEFAULT_PORT}/v1`);
+    } catch (e) { stderr.write(`Error: ${(e as Error).message}\n`); exit(1); }
+    return;
+  }
+  if (sub === "stop") {
+    console.log(mlx.stopVllmMlx() ? "✓ vllm-mlx stopped" : "vllm-mlx not running");
+    return;
+  }
+  if (sub === "status" || !sub) {
+    const s = mlx.status();
+    if (!mlx.vllmMlxAvailable()) { console.log("vllm-mlx not installed"); return; }
+    console.log(`vllm-mlx: ${s.running ? "running" : "stopped"}${s.pid ? ` (pid ${s.pid})` : ""}`);
+    console.log(`  model: ${s.model}`);
+    console.log(`  port:  ${s.port}`);
+    return;
+  }
+  stderr.write("Usage: stackai mlx {serve|stop|status} [--model <id>]\n");
+  exit(1);
+}
 
 // ---- tui (terminal interface) -------------------------------------------
 async function cmdTui(_args: string[]) {

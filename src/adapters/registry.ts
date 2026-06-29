@@ -25,6 +25,9 @@ import { HermesAdapter } from "./hermes.js";
 import { ZcodeAdapter } from "./zcode.js";
 import { GenericAdapter } from "./generic.js";
 import { FuguAdapter } from "./fugu.js";
+import { ClineAdapter } from "./cline.js";
+import { DeepseekAdapter } from "./deepseek.js";
+import { JcodeAdapter } from "./jcode.js";
 
 /** Built-in factories. Anything not here falls through to GenericAdapter. */
 const BUILTIN_FACTORIES: Record<string, (cfg: AgentConfig) => AgentAdapter> = {
@@ -39,6 +42,10 @@ const BUILTIN_FACTORIES: Record<string, (cfg: AgentConfig) => AgentAdapter> = {
   zcode: (cfg) => new ZcodeAdapter(cfg),
   // Cloud meta-orchestrator — registered even without a config entry, opt-in.
   fugu: () => new FuguAdapter(),
+  // Fleet peers discovered on this Mac Studio:
+  cline: (cfg) => new ClineAdapter(cfg),
+  deepseek: (cfg) => new DeepseekAdapter(cfg),
+  jcode: (cfg) => new JcodeAdapter(cfg),
 };
 
 export class AdapterRegistry {

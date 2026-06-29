@@ -108,3 +108,15 @@ agents:
     nodeRun: true
     prefixArgs: []
     promptPositional: false
+- command: /Users/davidai/.npm-global/bin/cline
+  defaultModel: sonnet
+  enabled: true
+  name: cline
+- command: /Users/davidai/.npm-global/bin/deepseek
+  defaultModel: deepseek-chat
+  enabled: true
+  name: deepseek
+- command: /Users/davidai/.local/bin/jcode
+  defaultModel: auto
+  enabled: true
+  name: jcode
