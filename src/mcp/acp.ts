@@ -76,7 +76,7 @@ export async function* runAcpSession(
       await rpc.request("session/load", { sessionId }).catch(() => {});
     } else {
       const res = await rpc.request("session/new", {
-        cwd: opts.cwd,
+        cwd: opts.cwd ?? process.cwd(), // required by some ACP servers (cline)
         mode: opts.mode,
         mcpServers: [],
         config: opts.model ? { model: opts.model } : undefined,
