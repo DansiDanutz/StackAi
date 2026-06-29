@@ -33,6 +33,7 @@ async function main() {
     case "task": return cmdTask(args.slice(1));
     case "models": return cmdModels(args.slice(1));
     case "doctor": return cmdDoctor(args.slice(1));
+    case "check": return cmdCheck(args.slice(1));
     case "doctor-agent": return cmdDoctorAgent(args.slice(1));
     case "adapters": return cmdAdapters(args.slice(1));
     case "patterns": return cmdPatterns();
@@ -519,6 +520,17 @@ function cmdPatterns() {
   }
 }
 
+// ---- check (integration harness) -----------------------------------------
+async function cmdCheck(args: string[]) {
+  const { runCheck } = await import("./check.js");
+  const agentsFlag = args.indexOf("--agents");
+  const agents = agentsFlag >= 0 ? (args[agentsFlag + 1] ?? "").split(",").filter(Boolean) : undefined;
+  const noLive = args.includes("--no-live");
+  const json = args.includes("--json");
+  const code = await runCheck({ agents, noLive, json });
+  exit(code);
+}
+
 // ---- doctor --------------------------------------------------------------
 async function cmdDoctor(args: string[]) {
   const cfg = loadConfig();
@@ -847,6 +859,7 @@ Usage:
   stackai task "<task>" [--agents a,b,c,d] [--max-loops 3]  # 6-phase orchestrated task (Planning→Delivered)
   stackai models [--agent <name>]
   stackai doctor                          # probe all adapters
+  stackai check [--agents a,b] [--no-live] [--json]  # integration harness (daemon+endpoints+live agents)
   stackai doctor-agent <name>             # smoke-test one adapter
   stackai adapters list
   stackai adapters add <name> <cmd> [options]
