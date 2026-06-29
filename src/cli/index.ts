@@ -30,6 +30,7 @@ async function main() {
   switch (cmd) {
     case "run": return cmdRun(args.slice(1));
     case "chat": return cmdChat(args.slice(1));
+    case "task": return cmdTask(args.slice(1));
     case "models": return cmdModels(args.slice(1));
     case "doctor": return cmdDoctor(args.slice(1));
     case "doctor-agent": return cmdDoctorAgent(args.slice(1));
@@ -304,6 +305,69 @@ async function cmdChat(args: string[]) {
 
   const { startChatRepl } = await import("../chat/repl.js");
   await startChatRepl({ registry, router, policy, agent, model, cwd, resumeId });
+}
+
+// ---- task (6-phase orchestrator) -----------------------------------------
+async function cmdTask(args: string[]) {
+  const task = args.filter((a) => !a.startsWith("-")).join(" ");
+  if (!task) {
+    stderr.write('Usage: stackai task "<task>" [--agents a,b,c,d] [--max-loops 3]\n');
+    exit(1);
+  }
+  const agentsFlag = args.indexOf("--agents");
+  const agents = agentsFlag >= 0 ? (args[agentsFlag + 1] ?? "").split(",").filter(Boolean) : undefined;
+  const maxLoops = args.includes("--max-loops") ? Number(args[args.indexOf("--max-loops") + 1]) : 2;
+  const cwd = args.includes("--cwd") ? args[args.indexOf("--cwd") + 1] : undefined;
+
+  const cfg = loadConfig();
+  const registry = createRegistry(cfg);
+  const router = new ModelRouterImpl(cfg.models);
+  const policy = defaultPolicy();
+  const { Scheduler } = await import("../kernel/scheduler.js");
+  const { TaskOrchestrator, PHASE_LABELS } = await import("../orchestrator/task.js");
+  const scheduler = new Scheduler(policy, { concurrency: 2 });
+
+  // Resolve the dashboard ingest URL (CLI → daemon broadcast bridge).
+  const { port: dashPort } = await import("../ports.js");
+  const ingestUrl = `http://127.0.0.1:${dashPort("dashboard")}/api/events`;
+  const postEvent = async (type: string, data: unknown) => {
+    try {
+      await fetch(ingestUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type, data }) });
+    } catch { /* daemon may be down — ignore */ }
+  };
+
+  const result = await new TaskOrchestrator(registry, router, scheduler, policy, {
+    task, agents, maxLoops, cwd,
+    onEvent: (evt) => {
+      if (evt.kind === "phase") {
+        stdout.write(`\n${"\x1b[1m"}── Phase: ${PHASE_LABELS[evt.phase]}${evt.iteration != null ? ` (iteration ${evt.iteration + 1})` : ""} ──${"\x1b[0m"}\n`);
+        void postEvent("phase", { phase: evt.phase, iteration: evt.iteration });
+      } else if (evt.kind === "message" && evt.message) {
+        const m = evt.message;
+        const handoff = m.toAgent ? ` ${"\x1b[90m"}→ ${m.toAgent}${"\x1b[0m"}` : "";
+        stdout.write(`${"\x1b[36m"}${m.fromAgent}${"\x1b[0m"}${handoff} ${"\x1b[2m"}[${m.phase}]${"\x1b[0m"}\n`);
+        // Show a short preview of the content.
+        const preview = m.content.replace(/\s+/g, " ").trim().slice(0, 160);
+        if (preview) stdout.write(`${"\x1b[2m"}${preview}${preview.length >= 160 ? "…" : ""}${"\x1b[0m"}\n`);
+        void postEvent("conversation", m);
+      } else if (evt.kind === "done") {
+        void postEvent("done", { runId: evt.result.runId, status: evt.result.status });
+      }
+    },
+  }).run();
+
+  // Persist the full conversation transcript to Obsidian.
+  try {
+    const { logTaskRun } = await import("../memory/run-logger.js");
+    const notePath = logTaskRun(result);
+    stdout.write(`\n${"\x1b[1m"}── ${result.status.toUpperCase()} ──${"\x1b[0m"}\n`);
+    stdout.write(`  run:    ${result.runId}\n`);
+    stdout.write(`  iters:  ${result.iterations}\n`);
+    stdout.write(`  time:   ${(result.totalDurationMs / 1000).toFixed(1)}s\n`);
+    if (notePath) stdout.write(`  vault:  ${notePath}\n`);
+  } catch { /* best-effort */ }
+
+  exit(result.status === "failed" ? 1 : 0);
 }
 
 // ---- models --------------------------------------------------------------
@@ -780,6 +844,7 @@ function usage(code: number) {
 Usage:
   stackai run "<task>" [--pattern ensemble] [--agent claude] [--judge fugu] [--model sonnet] [--cwd .] [--full-auto] [--text]
   stackai chat [--agent codex] [--model sonnet] [--resume <id>] [--list]   # interactive chat with history
+  stackai task "<task>" [--agents a,b,c,d] [--max-loops 3]  # 6-phase orchestrated task (Planning→Delivered)
   stackai models [--agent <name>]
   stackai doctor                          # probe all adapters
   stackai doctor-agent <name>             # smoke-test one adapter

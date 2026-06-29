@@ -38,6 +38,19 @@ export function startServer(opts: ServerOptions = {}): http.Server {
     const path = url.pathname;
 
     try {
+      // ---- POST: event ingest (CLI orchestrator → daemon → WS broadcast) ----
+      if (req.method === "POST" && path === "/api/events") {
+        const body = await readBody(req);
+        try {
+          const evt = JSON.parse(body);
+          // Broadcast to all connected dashboard WS clients (Conversation tab).
+          broadcast(evt.type ?? "event", evt.data ?? evt);
+          return json(res, { ok: true });
+        } catch {
+          return json(res, { error: "invalid JSON" }, 400);
+        }
+      }
+
       // ---- static dashboard ----
       if (path === "/" || path === "/index.html") {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -192,4 +205,14 @@ function json(res: http.ServerResponse, body: unknown, status = 200): void {
     "Access-Control-Allow-Origin": "*",
   });
   res.end(JSON.stringify(body));
+}
+
+/** Read the full request body (for POST /api/events). */
+function readBody(req: http.IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
+  });
 }

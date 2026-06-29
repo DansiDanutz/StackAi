@@ -17,3 +17,5 @@
 (Use `node --trace-warnings ...` to show where the warning was created)
 /bin/sh: tailscale: command not found
 /bin/sh: tailscale: command not found
+(node:5640) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

@@ -144,6 +144,52 @@ export function logChatSession(session: {
   return written;
 }
 
+/** Log a full 6-phase task run (with agent conversation) to Obsidian. */
+export function logTaskRun(result: {
+  runId: string; task: string; status: string; iterations: number;
+  totalDurationMs: number; finalOutput: string;
+  conversation: { phase: string; fromAgent: string; toAgent?: string; content: string; iteration?: number; ts: string }[];
+  phases: { phase: string; agent: string; durationMs: number; iteration?: number }[];
+}): string | null {
+  const sink = getObsidianSink();
+  if (!sink.enabled) return null;
+
+  const runDate = dateStamp();
+  const slug = result.task.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  const notePath = `${BASE}/Tasks/${runDate.slice(0, 10)}-${slug || result.runId.slice(0, 8)}`;
+
+  const body = [
+    `**Task:** ${result.task}`,
+    `**Status:** ${result.status}`,
+    `**Run:** \`${result.runId}\``,
+    `**Iterations:** ${result.iterations}`,
+    `**Duration:** ${(result.totalDurationMs / 1000).toFixed(1)}s`,
+    "",
+    "## Agent Conversation",
+    "",
+    ...result.conversation.map((m) => {
+      const handoff = m.toAgent ? ` → **${m.toAgent}**` : "";
+      const iter = m.iteration != null ? ` (iter ${m.iteration + 1})` : "";
+      return `### [${m.phase.toUpperCase()}] **${m.fromAgent}**${handoff}${iter}  · ${m.ts.slice(11, 19)}\n\n${truncate(m.content, 3000)}`;
+    }),
+    "",
+    "## Delivered Output",
+    "",
+    "```",
+    truncate(result.finalOutput, 4000),
+    "```",
+    "",
+    `_Logged by Stack Ai OS · ${shortDate()}_`,
+  ].join("\n");
+
+  const written = sink.writeNote(VAULT, notePath, body, ["stack-ai-os", "task", "orchestration"]);
+  if (written) {
+    const row = `- [[${notePath.slice(notePath.lastIndexOf("/") + 1)}|${runDate.slice(0, 16)}]] — task ${result.status} (${result.iterations} iters) — ${truncate(firstLine(result.task), 50)}`;
+    sink.appendNote(VAULT, `${BASE}/INDEX`, row + "\n");
+  }
+  return written;
+}
+
 /** Log a learning (insight worth keeping) to the Learnings folder. */
 export function logLearning(title: string, content: string, tags: string[] = []): string | null {
   const sink = getObsidianSink();

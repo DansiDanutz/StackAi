@@ -1,0 +1,71 @@
+/**
+ * Stack Ai OS — TaskOrchestrator logic tests.
+ *
+ * Tests the deterministic pieces: phase sequencing, PHASE_PROMPTS templates,
+ * team resolution, PHASE ordering. The full 6-phase run (which spawns real
+ * agents) is validated via the end-to-end `stackai task` test.
+ */
+import { describe, it, expect } from "vitest";
+import { PHASES, PHASE_LABELS, PHASE_PROMPTS } from "../src/orchestrator/task.js";
+
+describe("Phase definitions", () => {
+  it("has exactly 6 phases in the right order", () => {
+    expect(PHASES).toEqual(["planning", "orchestrating", "running", "testing", "looping", "delivered"]);
+    expect(PHASES.length).toBe(6);
+  });
+
+  it("labels every phase in uppercase", () => {
+    for (const p of PHASES) {
+      expect(PHASE_LABELS[p]).toBe(p.toUpperCase());
+    }
+  });
+});
+
+describe("PHASE_PROMPTS", () => {
+  it("defines the 4 core role prompts (planning/orchestrating/running/testing)", () => {
+    expect(PHASE_PROMPTS.planning).toBeDefined();
+    expect(PHASE_PROMPTS.orchestrating).toBeDefined();
+    expect(PHASE_PROMPTS.running).toBeDefined();
+    expect(PHASE_PROMPTS.testing).toBeDefined();
+  });
+
+  it("planning prompt references {{task}} but not {{prior}}", () => {
+    expect(PHASE_PROMPTS.planning).toContain("{{task}}");
+    expect(PHASE_PROMPTS.planning).not.toContain("{{prior}}");
+  });
+
+  it("running/testing prompts chain via {{prior}} (sequential handoff)", () => {
+    expect(PHASE_PROMPTS.running).toContain("{{prior}}");
+    expect(PHASE_PROMPTS.testing).toContain("{{prior}}");
+    expect(PHASE_PROMPTS.orchestrating).toContain("{{prior}}");
+  });
+
+  it("testing prompt includes a VERDICT directive (PASS/FAIL)", () => {
+    expect(PHASE_PROMPTS.testing).toMatch(/VERDICT:\s*PASS/i);
+    expect(PHASE_PROMPTS.testing).toMatch(/VERDICT:\s*FAIL/i);
+  });
+
+  it("prompt substitution works (task + prior)", () => {
+    const filled = PHASE_PROMPTS.running
+      .replace(/\{\{task\}\}/g, "build a rate limiter")
+      .replace(/\{\{prior\}\}/g, "PLAN: step 1...");
+    expect(filled).toContain("build a rate limiter");
+    expect(filled).toContain("PLAN: step 1...");
+    expect(filled).not.toContain("{{");
+  });
+});
+
+describe("phase sequence invariant", () => {
+  it("delivered is always the last phase", () => {
+    expect(PHASES[PHASES.length - 1]).toBe("delivered");
+  });
+  it("planning is always the first phase", () => {
+    expect(PHASES[0]).toBe("planning");
+  });
+  it("running comes before testing (implement then review)", () => {
+    expect(PHASES.indexOf("running")).toBeLessThan(PHASES.indexOf("testing"));
+  });
+  it("looping comes after testing (review triggers loop)", () => {
+    expect(PHASES.indexOf("testing")).toBeLessThan(PHASES.indexOf("looping"));
+  });
+});

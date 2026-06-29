@@ -74,6 +74,7 @@ export const dashboardHtml = `<!DOCTYPE html>
     <button data-tab="fleet">Fleet</button>
     <button data-tab="models">Models</button>
     <button data-tab="runs">Runs</button>
+    <button data-tab="conversation">Conversation</button>
     <button data-tab="stats">Stats</button>
     <button data-tab="config">Config</button>
     <button data-tab="tailnet">Tailnet</button>
@@ -93,6 +94,11 @@ export const dashboardHtml = `<!DOCTYPE html>
   <section class="tab" id="models"><div id="models-table"></div></section>
   <!-- RUNS -->
   <section class="tab" id="runs"><div id="runs-table"></div></section>
+  <!-- CONVERSATION -->
+  <section class="tab" id="conversation">
+    <div id="phase-bar" style="display:flex;gap:6px;margin-bottom:16px"></div>
+    <div id="conv-transcript" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;height:480px;overflow-y:auto"></div>
+  </section>
   <!-- STATS -->
   <section class="tab" id="stats"><div id="stats-content"></div></section>
   <!-- CONFIG -->
@@ -223,12 +229,47 @@ async function loadConfig(){
   }catch(e){ $('config-content').innerHTML='<div class=empty>config load failed</div>'; }
 }
 
+// Conversation tab — phase bar + transcript (fed by WS events from the task orchestrator)
+const PHASE_LIST = ["planning","orchestrating","running","testing","looping","delivered"];
+let currentPhaseIdx = -1;
+function renderPhaseBar() {
+  const bar = $("phase-bar");
+  if (!bar) return;
+  bar.innerHTML = PHASE_LIST.map((p, i) => {
+    const cls = i < currentPhaseIdx ? "badge green" : i === currentPhaseIdx ? "badge yellow" : "badge dim";
+    return '<span class="'+cls+'" style="flex:1;text-align:center;padding:8px">'+p.toUpperCase()+'</span>';
+  }).join("");
+}
+function appendConversationMsg(m) {
+  const el = $("conv-transcript"); if (!el) return;
+  const line = document.createElement("div"); line.style.marginBottom = "12px";
+  const phaseTag = '<span class="badge purple" style="font-size:10px">'+(m.phase||'').toUpperCase()+'</span>';
+  const fromTag = '<b style="color:var(--cyan)">'+esc(m.fromAgent||'?')+'</b>';
+  const toTag = m.toAgent ? ' <span style="color:var(--dim)">→ '+esc(m.toAgent)+'</span>' : '';
+  const body = '<div style="margin-top:4px;white-space:pre-wrap">'+esc((m.content||'').slice(0,600))+((m.content||'').length>600?'…':'')+'</div>';
+  line.innerHTML = phaseTag+' '+fromTag+toTag+(m.iteration!=null?' <span class="badge dim">iter '+(m.iteration+1)+'</span>':'')+body;
+  el.appendChild(line); el.scrollTop = el.scrollHeight;
+}
+renderPhaseBar();
+
 // WebSocket live events
 function connectWS(){
   const proto = location.protocol==='https:'?'wss':'ws';
   const ws = new WebSocket(proto+'://'+location.host+'/ws');
   ws.onmessage = (ev)=>{
     const m = JSON.parse(ev.data);
+    // Route conversation/phase events to the Conversation tab.
+    if (m.type === 'phase' && m.data) {
+      const idx = PHASE_LIST.indexOf(m.data.phase);
+      if (idx >= 0 && idx > currentPhaseIdx) { currentPhaseIdx = idx; renderPhaseBar(); }
+    }
+    if (m.type === 'conversation' && m.data) {
+      appendConversationMsg(m.data);
+    }
+    if (m.type === 'done') {
+      currentPhaseIdx = PHASE_LIST.length - 1; renderPhaseBar();
+    }
+    // Also log everything to the Live tab.
     const log = $('live-log');
     const line = document.createElement('div'); line.className='line';
     if(m.type==='error') line.classList.add('err');
