@@ -53,6 +53,26 @@ stackai adapters list                # the fleet + capabilities
 stackai run "hello" --agent claude   # solo run
 ```
 
+## Install as a persistent tool
+
+Turn Stack Ai OS into a global command with an always-on dashboard daemon:
+
+```bash
+./install.sh                # builds, installs global 'stackai' bin, starts dashboard daemon
+./install.sh --no-daemon    # bin only, no daemon
+./install.sh --uninstall    # remove everything cleanly
+```
+
+After install:
+- `stackai` works **from any directory** (global bin in `~/.local/bin`)
+- The dashboard runs persistently at **http://127.0.0.1:42719** — auto-starts on
+  login and auto-restarts on crash (launchd `KeepAlive`)
+- Logs: `data/daemon.log` / `data/daemon.err.log`
+- Manage: `launchctl list com.danslab.stack-ai-os`
+
+The installer resolves node's absolute path (launchd runs with a minimal PATH)
+so the daemon survives reboots reliably.
+
 ### Store a secret securely
 
 ```bash
