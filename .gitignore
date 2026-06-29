@@ -28,3 +28,6 @@ Thumbs.db
 
 # Chat session data (resumable conversations — local only)
 data/chats/
+
+# oh-my-codex runtime logs (not part of the project)
+.omx/

@@ -1,4 +1,0 @@
-{"timestamp":"2026-06-29T20:53:42.696Z","verdict":"FAIL","raw_match":"VERDICT: FAIL","session_id":"","turn_id":"019f1526-aca6-7e30-b4fb-84f75f8bdb32","level":"info","type":"visual_verdict_persisted"}
-{"timestamp":"2026-06-29T23:08:31.846Z","verdict":"PASS","raw_match":"VERDICT: PASS","session_id":"","turn_id":"019f15a2-16f5-7822-95bc-12d317a2721a","level":"info","type":"visual_verdict_persisted"}
-{"timestamp":"2026-06-29T23:21:09.425Z","verdict":"FAIL","raw_match":"VERDICT: FAIL","session_id":"","turn_id":"019f15ad-2c5c-7352-96b4-f9db698adfd3","level":"info","type":"visual_verdict_persisted"}
-{"timestamp":"2026-06-29T23:31:44.158Z","verdict":"FAIL","raw_match":"VERDICT: FAIL","session_id":"","turn_id":"019f15b7-4788-7ba1-b5af-57e6a73e8606","level":"info","type":"visual_verdict_persisted"}
