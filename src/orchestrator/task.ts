@@ -117,7 +117,15 @@ export class TaskOrchestrator {
   async run(): Promise<TaskResult> {
     const { task, maxLoops = 2, timeoutSec = 600 } = this.opts;
     const start = Date.now();
-    const runId = await createRun("task", task, { cwd: this.opts.cwd });
+    // Store registration is best-effort — the orchestrator must still run if
+    // the store is unavailable (e.g. node:sqlite missing under vitest, or a
+    // corrupted DB). A synthetic runId keeps everything working.
+    let runId: string;
+    try {
+      runId = await createRun("task", task, { cwd: this.opts.cwd });
+    } catch {
+      runId = "taskrun-" + Date.now().toString(36);
+    }
 
     // Resolve the team. Default: planner=codex, orchestrator=gemini, coder=codex, reviewer=codex
     const team = this.resolveTeam();
@@ -180,21 +188,12 @@ export class TaskOrchestrator {
       // Record the final delivery as a message from the coder to the user.
       this.recordMessage("delivered", team.coder, undefined, implementation, iterations);
 
-      await updateRun(runId, {
-        status: status === "delivered" ? "done" : "failed",
-        winnerAgent: team.coder,
-        winnerText: implementation.slice(0, 5000),
-        iterations,
-        meta: {
-          pattern: "task", phases: this.phases.map((p) => ({ phase: p.phase, agent: p.agent, durationMs: p.durationMs })),
-          verdictAction: verdict?.action, loopCount: iterations,
-        },
-      });
+      try { await updateRun(runId, { status: status === "delivered" ? "done" : "failed", winnerAgent: team.coder, winnerText: implementation.slice(0, 5000), iterations, meta: { pattern: "task", phases: this.phases.map((p) => ({ phase: p.phase, agent: p.agent, durationMs: p.durationMs })), verdictAction: verdict?.action, loopCount: iterations } }); } catch { /* best-effort */ }
 
       return this.result(runId, status, iterations, verdict, start);
     } catch (e) {
       const msg = (e as Error).message;
-      await updateRun(runId, { status: "failed", meta: { error: msg } });
+      try { await updateRun(runId, { status: "failed", meta: { error: msg } }); } catch { /* best-effort */ }
       this.recordMessage("delivered", this.resolveTeam().planner, undefined, `[task failed: ${msg}]`, iterations);
       return this.result(runId, "failed", iterations, verdict, start);
     }
