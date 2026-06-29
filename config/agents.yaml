@@ -1,44 +1,110 @@
 agents:
-  - name: claude
-    command: /Users/davidai/.local/bin/claude
-    defaultModel: sonnet
-    enabled: true
-  - name: codex
-    command: /Users/davidai/.npm-global/bin/codex
-    prefixArgs:
-      - exec
-    defaultModel: gpt5
-    enabled: true
-  - name: opencode
-    command: /Users/davidai/.npm-global/bin/opencode
-    prefixArgs:
-      - run
-    defaultModel: sonnet
-    enabled: true
-  - name: gemini
-    command: /opt/homebrew/bin/gemini
-    defaultModel: gemini-pro
-    enabled: true
-  - name: kimi
-    command: /Users/davidai/.local/bin/kimi
-    defaultModel: kimi-latest
-    enabled: true
-  - name: openclaude
+- command: /Users/davidai/.local/bin/claude
+  defaultModel: sonnet
+  enabled: true
+  name: claude
+- command: /Users/davidai/.npm-global/bin/codex
+  defaultModel: gpt5
+  enabled: true
+  name: codex
+  prefixArgs:
+  - exec
+- command: /Users/davidai/.npm-global/bin/opencode
+  defaultModel: sonnet
+  enabled: true
+  name: opencode
+  prefixArgs:
+  - run
+- command: /opt/homebrew/bin/gemini
+  defaultModel: gemini-pro
+  enabled: true
+  name: gemini
+- command: /Users/davidai/.local/bin/kimi
+  defaultModel: kimi-latest
+  enabled: true
+  name: kimi
+- command: /Users/davidai/.npm-global/lib/node_modules/@gitlawb/openclaude/dist/cli.mjs
+  defaultModel: sonnet
+  enabled: true
+  name: openclaude
+  nodeRun: true
+  prefixArgs: []
+- command: /Users/davidai/.npm-global/bin/pi
+  defaultModel: qwen-local
+  enabled: true
+  name: pi
+- command: /Users/davidai/.local/bin/hermes
+  defaultModel: sonnet
+  enabled: true
+  name: hermes
+- command: /Applications/ZCode.app/Contents/Resources/glm/zcode.cjs
+  defaultModel: auto
+  enabled: true
+  name: zcode
+  nodeRun: true
+- capabilities:
+    acpServer: false
+    fullAuto: true
+    jsonStream: true
+    mcpClient: true
+    mcpServer: true
+    modelSelection: true
+    sessionResume: true
+  command: /Users/davidai/.npm-global/lib/node_modules/@gitlawb/openclaude/dist/cli.mjs
+  defaultModel: qwen3-fast:latest
+  dynamic: true
+  enabled: true
+  label: Qwen3 8B (local)
+  name: local-qwen3
+  nodeRun: true
+  template:
     command: /Users/davidai/.npm-global/lib/node_modules/@gitlawb/openclaude/dist/cli.mjs
+    flags:
+      json:
+      - --output-format
+      - stream-json
+      - --verbose
+      model:
+      - --model
+      - '{{model}}'
+      - --provider
+      - ollama
+      prompt:
+      - -p
+      - '{{prompt}}'
+    nodeRun: true
     prefixArgs: []
+    promptPositional: false
+- capabilities:
+    acpServer: false
+    fullAuto: true
+    jsonStream: true
+    mcpClient: true
+    mcpServer: true
+    modelSelection: true
+    sessionResume: true
+  command: /Users/davidai/.npm-global/lib/node_modules/@gitlawb/openclaude/dist/cli.mjs
+  defaultModel: qwen3-fast:latest
+  dynamic: true
+  enabled: true
+  label: Qwen2.5-Coder (local)
+  name: local-qwen-coder
+  nodeRun: true
+  template:
+    command: /Users/davidai/.npm-global/lib/node_modules/@gitlawb/openclaude/dist/cli.mjs
+    flags:
+      json:
+      - --output-format
+      - stream-json
+      - --verbose
+      model:
+      - --model
+      - '{{model}}'
+      - --provider
+      - ollama
+      prompt:
+      - -p
+      - '{{prompt}}'
     nodeRun: true
-    defaultModel: sonnet
-    enabled: true
-  - name: pi
-    command: /Users/davidai/.npm-global/bin/pi
-    defaultModel: qwen-local
-    enabled: true
-  - name: hermes
-    command: /Users/davidai/.local/bin/hermes
-    defaultModel: sonnet
-    enabled: true
-  - name: zcode
-    command: /Applications/ZCode.app/Contents/Resources/glm/zcode.cjs
-    nodeRun: true
-    defaultModel: auto
-    enabled: true
+    prefixArgs: []
+    promptPositional: false
