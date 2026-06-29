@@ -16,7 +16,7 @@ agents:
   prefixArgs:
   - run
 - command: /opt/homebrew/bin/gemini
-  defaultModel: gemini-pro
+  defaultModel: auto
   enabled: true
   name: gemini
 - command: /Users/davidai/.local/bin/kimi

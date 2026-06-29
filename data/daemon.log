@@ -10,3 +10,6 @@ Stack Ai OS dashboard: http://127.0.0.1:42719
 Press Ctrl+C to stop.
 Stack Ai OS dashboard: http://127.0.0.1:42719
   Tailscale: https://dans-mac-studio.tailc56ca0.ts.net (run 'stackai serve --tailnet' to publish)
+Press Ctrl+C to stop.
+Stack Ai OS dashboard: http://127.0.0.1:42719
+  Tailscale: https://dans-mac-studio.tailc56ca0.ts.net (run 'stackai serve --tailnet' to publish)

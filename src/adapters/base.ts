@@ -11,6 +11,7 @@
  */
 import { spawn } from "node:child_process";
 import { runAcpSession } from "../mcp/acp.js";
+import { resolveSecret } from "../security/vault.js";
 import type {
   AgentEvent,
   AgentName,
@@ -20,6 +21,29 @@ import type {
 } from "../types.js";
 import type { AgentAdapter } from "../types.js";
 import type { AgentConfig } from "../config.js";
+
+/** API keys that, if present in the secure vault, get injected into spawned
+ *  agent envs so they authenticate without relying on the caller's shell env. */
+const VAULT_KEY_NAMES = [
+  "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "DEEPSEEK_API_KEY",
+  "SAKANA_API_KEY", "OPENROUTER_API_KEY", "MOONSHOT_API_KEY", "GLM_API_KEY",
+  "GROQ_API_KEY", "PERPLEXITY_API_KEY", "NVIDIA_API_KEY", "FIRECRAWL_API_KEY",
+  "EXA_API_KEY", "OLLAMA_API_KEY",
+];
+
+/** Pull vault-stored keys into a plain env object. Best-effort; never throws. */
+function injectVaultKeys(): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const k of VAULT_KEY_NAMES) {
+    if (process.env[k] === undefined) {
+      try {
+        const v = resolveSecret(k);
+        if (v) out[k] = v;
+      } catch { /* vault read failed — skip */ }
+    }
+  }
+  return out;
+}
 
 export abstract class BaseAdapter implements AgentAdapter {
   abstract readonly name: AgentName;
@@ -80,9 +104,15 @@ export abstract class BaseAdapter implements AgentAdapter {
     const verbosity = req.verbosity ?? "stream-json";
     const timeoutMs = (req.timeoutSec ?? 600) * 1000;
 
+    // Inject vault-stored API keys into the child env so spawned agents
+    // authenticate regardless of the caller's shell env (the daemon/CLI may run
+    // without the user's exported keys). Only keys already in process.env OR the
+    // vault are added; never invents keys.
+    const childEnv = { ...process.env, ...injectVaultKeys(), ...env };
+
     const child = spawn(cmd, args, {
       cwd: req.cwd ?? process.cwd(),
-      env: { ...process.env, ...env },
+      env: childEnv,
       stdio: ["pipe", "pipe", "pipe"],
     });
 

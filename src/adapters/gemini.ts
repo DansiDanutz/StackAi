@@ -38,9 +38,11 @@ export class GeminiAdapter extends BaseAdapter {
     return resolveWithDefault(this.name, alias, router, this.cfg.defaultModel);
   }
 
-  /** Launch gemini in ACP mode. */
+  // NOTE: gemini --acp starts a session but the ACP event stream isn't reliably
+  // consumable across builds; the stream-json path (-p + -o) is proven live, so
+  // we return null to disable ACP routing and use buildCommand() instead.
   acpCommand(): { cmd: string; args: string[] } | null {
-    return { cmd: this.cfg.command, args: ["--acp"] };
+    return null;
   }
 
   buildCommand(req: RunRequest, router: ModelRouter) {
