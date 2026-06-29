@@ -90,8 +90,15 @@ export class Scheduler {
         if (this.cancelled.get(job)) { timedOut = true; break; }
         events.push(evt);
         job.onEvent?.(job.req.agent, evt);
+        // Accumulate assistant text as it streams (some CLIs' done event has
+        // empty finalText — the content arrives via assistant text events).
+        if (evt.type === "assistant" && evt.subtype === "text") finalText += evt.text;
         if (evt.type === "done") {
-          exitCode = evt.exitCode; finalText = evt.finalText; sessionId = evt.sessionId;
+          exitCode = evt.exitCode;
+          // done.finalText may be empty even when text was streamed — only
+          // overwrite if the done event actually carries text.
+          if (evt.finalText) finalText = evt.finalText;
+          sessionId = evt.sessionId;
           if (exitCode === 124) timedOut = true;
         }
         if (evt.type === "cost" && evt.costUsd != null) costUsd = (costUsd ?? 0) + evt.costUsd;

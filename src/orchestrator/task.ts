@@ -17,6 +17,8 @@
  * implementation in Phase 4. Emits TaskEvents at each transition so the
  * dashboard Conversation tab can render the handoff chain live.
  */
+import { writeFileSync, mkdirSync } from "node:fs";
+import { resolve, dirname } from "node:path";
 import type { AgentName, AgentEvent, RunRequest, RunResult } from "../types.js";
 import type { AdapterRegistry } from "../adapters/registry.js";
 import type { ModelRouter } from "../types.js";
@@ -64,6 +66,10 @@ export interface TaskOrchestratorOptions {
   timeoutSec?: number;    // per-phase. Default 600.
   cwd?: string;
   posture?: RunRequest["posture"];
+  /** Path to write the delivered output to (closes the text→file gap). */
+  out?: string;
+  /** Extract a clean code block from the delivered text before writing. */
+  extractCode?: boolean;
   onEvent?: (evt: TaskEvent) => void;
   /** Per-agent streaming events (for terminal live renderer). */
   onAgentEvent?: (phase: Phase, agent: AgentName, evt: AgentEvent) => void;
@@ -89,7 +95,7 @@ export interface TaskResult {
   totalDurationMs: number;
 }
 
-const PHASE_PROMPTS: Record<string, string> = {
+export const PHASE_PROMPTS: Record<string, string> = {
   planning: `You are the PLANNER. Break this task into a concrete, numbered implementation plan. Be specific about files, functions, and approach. Do NOT write the full implementation — just the plan.\n\n=== TASK ===\n{{task}}`,
   orchestrating: `You are the ORCHESTRATOR. Given this task and plan, assign roles: specify which agent should implement, which should review, and the order of work. Keep it concise.\n\n=== TASK ===\n{{task}}\n\n=== PLAN ===\n{{prior}}`,
   running: `You are the CODER. Implement the task following the plan. Produce complete, working code. Use the prior context.\n\n=== TASK ===\n{{task}}\n\n=== PRIOR CONTEXT (plan + orchestration) ===\n{{prior}}`,
@@ -187,7 +193,9 @@ export class TaskOrchestrator {
 
       return this.result(runId, status, iterations, verdict, start);
     } catch (e) {
-      await updateRun(runId, { status: "failed", meta: { error: (e as Error).message } });
+      const msg = (e as Error).message;
+      await updateRun(runId, { status: "failed", meta: { error: msg } });
+      this.recordMessage("delivered", this.resolveTeam().planner, undefined, `[task failed: ${msg}]`, iterations);
       return this.result(runId, "failed", iterations, verdict, start);
     }
   }
@@ -208,9 +216,20 @@ export class TaskOrchestrator {
     };
 
     const phaseStart = Date.now();
-    const handle = this.scheduler.submit(adapter, this.router, req, (a, evt) =>
-      this.opts.onAgentEvent?.(phase, a, evt));
-    const result: RunResult = await handle.done;
+    // Retry a phase once on failure — some agents (codex ChatGPT OAuth) 401
+    // intermittently; a single retry absorbs the transient auth blip.
+    let result: RunResult;
+    const attempt = async (): Promise<RunResult> => {
+      const h = this.scheduler.submit(adapter, this.router, req, (a, evt) =>
+        this.opts.onAgentEvent?.(phase, a, evt));
+      return h.done;
+    };
+    result = await attempt();
+    if (result.exitCode !== 0 && !result.finalText) {
+      // Transient failure (auth/network) — retry once after a brief pause.
+      await new Promise((r) => setTimeout(r, 1500));
+      result = await attempt();
+    }
 
     const output = result.finalText;
     this.phases.push({ phase, agent, output, durationMs: Date.now() - phaseStart, iteration });
@@ -267,6 +286,25 @@ export class TaskOrchestrator {
 
   private result(runId: string, status: "delivered" | "failed", iterations: number, verdict: Verdict | undefined, start: number): TaskResult {
     const finalOutput = this.phases.filter((p) => p.phase === "running").pop()?.output ?? "";
+
+    // If --out was requested, write the delivered output to disk (closes the
+    // text→file gap: agents produced code, now it lands in a real file).
+    if (this.opts.out && status === "delivered") {
+      try {
+        const content = this.opts.extractCode !== false
+          ? extractCodeBlock(finalOutput) ?? finalOutput
+          : finalOutput;
+        const outPath = resolve(this.opts.cwd ?? process.cwd(), this.opts.out);
+        mkdirSync(dirname(outPath), { recursive: true });
+        writeFileSync(outPath, content, "utf8");
+        // Record the file write as a final conversation message.
+        this.recordMessage("delivered", this.resolveTeam().coder, undefined, `[written to ${outPath}]`, iterations);
+      } catch (e) {
+        // Surface the write error but don't fail the task.
+        this.recordMessage("delivered", this.resolveTeam().coder, undefined, `[file write failed: ${(e as Error).message}]`, iterations);
+      }
+    }
+
     const result: TaskResult = {
       runId, task: this.opts.task, phases: this.phases, conversation: this.messages,
       finalOutput, iterations, verdict, status, totalDurationMs: Date.now() - start,
@@ -276,4 +314,15 @@ export class TaskOrchestrator {
   }
 }
 
-export { PHASE_PROMPTS };
+/**
+ * Extract the content of a fenced code block from agent output. Handles
+ * ```lang\n...\n``` and indented variants. Returns null if no block found.
+ */
+export function extractCodeBlock(text: string): string | null {
+  // Prefer the longest fenced block (agents often wrap the solution in ```).
+  const matches = [...text.matchAll(/```(?:[a-zA-Z0-9_+-]*)\n([\s\S]*?)```/g)];
+  if (matches.length === 0) return null;
+  // Return the longest match — that's most likely the actual solution.
+  const longest = matches.reduce((a, b) => (b[1]!.length > a[1]!.length ? b : a));
+  return longest[1]!.trim();
+}

@@ -319,6 +319,10 @@ async function cmdTask(args: string[]) {
   const agents = agentsFlag >= 0 ? (args[agentsFlag + 1] ?? "").split(",").filter(Boolean) : undefined;
   const maxLoops = args.includes("--max-loops") ? Number(args[args.indexOf("--max-loops") + 1]) : 2;
   const cwd = args.includes("--cwd") ? args[args.indexOf("--cwd") + 1] : undefined;
+  const out = args.includes("--out") ? args[args.indexOf("--out") + 1] : undefined;
+  // --apply = shorthand for full-auto posture (agents get write access to cwd)
+  // + --out to a default file if none specified.
+  const apply = args.includes("--apply");
 
   const cfg = loadConfig();
   const registry = createRegistry(cfg);
@@ -339,6 +343,9 @@ async function cmdTask(args: string[]) {
 
   const result = await new TaskOrchestrator(registry, router, scheduler, policy, {
     task, agents, maxLoops, cwd,
+    posture: apply ? "full-auto" : undefined,
+    out: out ?? (apply ? "stackai-output.txt" : undefined),
+    extractCode: true,
     onEvent: (evt) => {
       if (evt.kind === "phase") {
         stdout.write(`\n${"\x1b[1m"}── Phase: ${PHASE_LABELS[evt.phase]}${evt.iteration != null ? ` (iteration ${evt.iteration + 1})` : ""} ──${"\x1b[0m"}\n`);
@@ -366,6 +373,14 @@ async function cmdTask(args: string[]) {
     stdout.write(`  iters:  ${result.iterations}\n`);
     stdout.write(`  time:   ${(result.totalDurationMs / 1000).toFixed(1)}s\n`);
     if (notePath) stdout.write(`  vault:  ${notePath}\n`);
+    if (result.status === "failed") {
+      const lastMsg = result.conversation[result.conversation.length - 1];
+      if (lastMsg?.content) stdout.write(`  ${"\x1b[31m"}error:  ${lastMsg.content.slice(0, 200)}${"\x1b[0m"}\n`);
+    }
+    if (out && result.status === "delivered") {
+      const written = result.conversation.find((m: any) => m.content?.startsWith("[written to"));
+      if (written) stdout.write(`  out:    ${written.content}${"\x1b[0m"}\n`);
+    }
   } catch { /* best-effort */ }
 
   exit(result.status === "failed" ? 1 : 0);
@@ -856,7 +871,7 @@ function usage(code: number) {
 Usage:
   stackai run "<task>" [--pattern ensemble] [--agent claude] [--judge fugu] [--model sonnet] [--cwd .] [--full-auto] [--text]
   stackai chat [--agent codex] [--model sonnet] [--resume <id>] [--list]   # interactive chat with history
-  stackai task "<task>" [--agents a,b,c,d] [--max-loops 3]  # 6-phase orchestrated task (Planning→Delivered)
+  stackai task "<task>" [--agents a,b,c,d] [--max-loops 3] [--out file] [--apply]  # 6-phase task → Delivered (writes output to file)
   stackai models [--agent <name>]
   stackai doctor                          # probe all adapters
   stackai check [--agents a,b] [--no-live] [--json]  # integration harness (daemon+endpoints+live agents)

@@ -6,7 +6,7 @@
  * agents) is validated via the end-to-end `stackai task` test.
  */
 import { describe, it, expect } from "vitest";
-import { PHASES, PHASE_LABELS, PHASE_PROMPTS } from "../src/orchestrator/task.js";
+import { PHASES, PHASE_LABELS, PHASE_PROMPTS, extractCodeBlock } from "../src/orchestrator/task.js";
 
 describe("Phase definitions", () => {
   it("has exactly 6 phases in the right order", () => {
@@ -67,5 +67,33 @@ describe("phase sequence invariant", () => {
   });
   it("looping comes after testing (review triggers loop)", () => {
     expect(PHASES.indexOf("testing")).toBeLessThan(PHASES.indexOf("looping"));
+  });
+});
+
+describe("extractCodeBlock", () => {
+  it("extracts a fenced code block", () => {
+    const text = "Here's the solution:\n```python\ndef f(): return 42\n```\nDone.";
+    expect(extractCodeBlock(text)).toBe("def f(): return 42");
+  });
+
+  it("handles language-tagged fences", () => {
+    const text = "```ts\nconst x = 1;\n```";
+    expect(extractCodeBlock(text)).toBe("const x = 1;");
+  });
+
+  it("returns the LONGEST block when multiple present", () => {
+    const text = "```\nshort\n```\n```python\n# this is the real solution\ndef is_prime(n):\n    return n > 1\n```";
+    const result = extractCodeBlock(text);
+    expect(result).toContain("is_prime");
+    expect(result).not.toContain("short");
+  });
+
+  it("returns null when no code block present", () => {
+    expect(extractCodeBlock("just plain text, no code")).toBeNull();
+  });
+
+  it("handles multi-line blocks with blank lines", () => {
+    const text = "```\nline1\n\nline3\n```";
+    expect(extractCodeBlock(text)).toBe("line1\n\nline3");
   });
 });
