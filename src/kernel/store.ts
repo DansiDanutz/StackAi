@@ -134,14 +134,21 @@ export async function createRun(
   opts?: { budgetUsd?: number; cwd?: string; id?: string }
 ): Promise<string> {
   const id = opts?.id ?? uuid();
-  (await db()).prepare(
-    "INSERT INTO runs (id, ts, pattern, task, status, budget_usd, spent_usd, iterations, cwd) VALUES (?,?,?,?,?,?,?,?,?)"
-  ).run(id, now(), pattern, task, "running", opts?.budgetUsd ?? null, 0, 0, opts?.cwd ?? null);
+  try {
+    (await db()).prepare(
+      "INSERT INTO runs (id, ts, pattern, task, status, budget_usd, spent_usd, iterations, cwd) VALUES (?,?,?,?,?,?,?,?,?)"
+    ).run(id, now(), pattern, task, "running", opts?.budgetUsd ?? null, 0, 0, opts?.cwd ?? null);
+  } catch {
+    // Store unavailable (node:sqlite missing, corrupted DB, etc.) — return a
+    // synthetic id so callers never crash. The run still executes; it just isn't
+    // persisted to the dashboard. This is the production-resilience contract.
+  }
   return id;
 }
 
 export async function updateRun(id: string, patch: Partial<RunRecord>): Promise<void> {
-  const d = await db();
+  let d;
+  try { d = await db(); } catch { return; }
   const cur = d.prepare("SELECT * FROM runs WHERE id = ?").get(id) as Record<string, any> | undefined;
   if (!cur) return;
   const merged = { ...cur, ...stripUndefined(patch), ts: cur.ts };
@@ -162,7 +169,8 @@ export async function updateRun(id: string, patch: Partial<RunRecord>): Promise<
 
 export async function recordCandidate(runId: string, iteration: number, result: RunResult, model?: string, score?: number): Promise<string> {
   const id = uuid();
-  const d = await db();
+  let d;
+  try { d = await db(); } catch { return id; }
   d.prepare(
     `INSERT INTO candidates (id, run_id, iteration, agent, model, exit_code, final_text, score, cost_usd, duration_ms, timed_out, session_id, ts)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`

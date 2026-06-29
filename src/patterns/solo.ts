@@ -56,9 +56,13 @@ export async function runSolo(
   for await (const evt of adapter.run(req, router)) {
     events.push(evt);
     opts.onEvent?.(opts.agent, evt);
+    // Accumulate streamed assistant text (some CLIs' done event has empty
+    // finalText — content arrives via assistant text events).
+    if (evt.type === "assistant" && evt.subtype === "text") finalText += evt.text;
     if (evt.type === "done") {
       exitCode = evt.exitCode;
-      finalText = evt.finalText;
+      // Only overwrite if done carries actual text (non-empty).
+      if (evt.finalText) finalText = evt.finalText;
       sessionId = evt.sessionId;
       if (exitCode === 124) timedOut = true;
     }
