@@ -135,14 +135,17 @@ CLI / TUI / Web ──▶ KERNEL (scheduler · loop-engine · safety) ──▶ 
 
 ## Status
 
-- ✅ Phase 0–3: adapters, model router, dynamic fleet, safety, kernel (scheduler + run store), ensemble + judge loop engine, ACP integration, secure vault, Obsidian + memory recall.
-- 🚧 Phase 4: Tailscale fleet mesh (cross-machine agent routing).
-- 🚧 Phase 5: MCP two-way bus (OS as MCP server + inject shared servers).
+- ✅ Phase 0–5 + 8: adapters, model router, dynamic fleet, safety, kernel (scheduler + run store), ensemble + judge loop engine, ACP integration, secure vault, Obsidian + memory recall, Tailscale mesh, web dashboard (:42719), MCP two-way bus, Fugu cloud judge.
 - 🚧 Phase 6: Ink TUI (live orchestration + approvals).
-- 🚧 Phase 7: Web dashboard (on the existing Tailscale funnel).
 - 🚧 Phase 9: pipeline/debate/divide-and-conquer patterns, full guardrails.
 
-See `docs/RESEARCH.md` for the OSS leverage analysis (ACP, Open Multi-Agent, etc.).
+**65 tests green** (60 unit + 5 integration). See `docs/`.
+
+## Documentation
+
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — system structure, core abstractions, the adapter/kernel/patterns/MCP design, ADRs, module reference.
+- **[docs/DATA-FLOW.md](docs/DATA-FLOW.md)** — worked examples tracing solo/ACP/ensemble/MCP-recall/secure-key operations through every layer.
+- **[docs/RESEARCH.md](docs/RESEARCH.md)** — OSS leverage analysis (ACP, Open Multi-Agent, Sakana Fugu).
 
 ---
 
