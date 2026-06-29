@@ -39,6 +39,7 @@ async function main() {
     case "recall": return cmdRecall(args.slice(1));
     case "serve": return cmdServe(args.slice(1));
     case "mcp": return cmdMcp(args.slice(1));
+    case "tui": return cmdTui(args.slice(1));
     case "vault": return cmdVault(args.slice(1));
     default:
       stderr.write(`Unknown command: ${cmd}\n`);
@@ -350,6 +351,16 @@ async function probe(a: ReturnType<ReturnType<typeof createRegistry>["enabled"]>
   }
 }
 
+// ---- tui (terminal interface) -------------------------------------------
+async function cmdTui(_args: string[]) {
+  if (!process.stdin.isTTY) {
+    stderr.write("TUI requires an interactive terminal.\n");
+    exit(1);
+  }
+  const { startTUI } = await import("../tui/app.js");
+  await startTUI();
+}
+
 // ---- mcp (two-way bus) ---------------------------------------------------
 async function cmdMcp(args: string[]) {
   const sub = args[0];
@@ -596,6 +607,7 @@ Usage:
   stackai mcp serve                      # run as MCP server (CLIs call back into the OS)
   stackai mcp config                     # print mcp-config snippet for CLIs
   stackai mcp inject <agent>             # show servers injected into an agent
+  stackai tui                            # live terminal interface
   stackai vault set <KEY> [value|stdin]   # store in macOS Keychain (encrypted)
   stackai vault get <KEY>
   stackai vault list
