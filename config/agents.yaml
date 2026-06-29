@@ -4,7 +4,7 @@ agents:
   enabled: true
   name: claude
 - command: /Users/davidai/.npm-global/bin/codex
-  defaultModel: gpt5
+  defaultModel: auto
   enabled: true
   name: codex
   prefixArgs:

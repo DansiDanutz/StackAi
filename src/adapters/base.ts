@@ -86,6 +86,12 @@ export abstract class BaseAdapter implements AgentAdapter {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
+    // Close stdin immediately. Several CLIs (codex, gemini) read additional
+    // context from stdin when it's a pipe and BLOCK forever waiting for input
+    // if left open. We never pipe prompt content via stdin (always via flags),
+    // so end it right away.
+    try { child.stdin.end(); } catch { /* already closed */ }
+
     let timedOut = false;
     let finalText = "";
     let sessionId: string | undefined;

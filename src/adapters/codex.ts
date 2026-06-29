@@ -47,7 +47,12 @@ export class CodexAdapter extends BaseAdapter {
     if (req.verbosity !== "text") args.push("--json");
 
     const model = this.resolveModel(req.model ?? "auto", router);
-    if (model && this.capabilities.modelSelection) args.push("-m", model);
+    // Only pass -m when a specific model is requested. Codex in ChatGPT-login
+    // mode rejects model ids like gpt-5-codex ("not supported with a ChatGPT
+    // account"); omitting -m lets codex pick its own model. Skip on "auto".
+    if (model && model !== "auto" && this.capabilities.modelSelection) {
+      args.push("-m", model);
+    }
 
     // Safety: codex's nuclear flag is the cleanest full-auto toggle.
     if (req.posture === "full-auto") {
