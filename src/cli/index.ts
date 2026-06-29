@@ -37,6 +37,7 @@ async function main() {
     case "fleet": return cmdFleet();
     case "runs": return cmdRuns(args.slice(1));
     case "recall": return cmdRecall(args.slice(1));
+    case "serve": return cmdServe(args.slice(1));
     case "vault": return cmdVault(args.slice(1));
     default:
       stderr.write(`Unknown command: ${cmd}\n`);
@@ -94,9 +95,9 @@ async function runEnsembleCLI(parsed: ParsedRun, preset: any, cfg: any, registry
   const result = await runEnsemble(registry, router, scheduler, policy, {
     task: parsed.prompt!,
     agents,
-    judgeAgent: (preset.judge ?? "claude") as AgentName,
+    judgeAgent: (parsed.judge ?? preset.judge ?? "claude") as AgentName,
     model: parsed.model ?? preset.model,
-    judgeModel: parsed.model === "opus" ? "opus" : undefined,
+    judgeModel: parsed.judge === "fugu" ? "fugu-ultra" : (parsed.model === "opus" ? "opus" : undefined),
     width: preset.width,
     maxIterations: preset.maxIterations,
     budgetUsd: preset.budgetUsd,
@@ -126,7 +127,7 @@ async function runEnsembleCLI(parsed: ParsedRun, preset: any, cfg: any, registry
   exit(0);
 }
 
-type ParsedRun = { prompt?: string; agent?: string; agents?: string[]; model?: string; pattern?: string; cwd?: string; fullAuto?: boolean; text?: boolean; quiet?: boolean };
+type ParsedRun = { prompt?: string; agent?: string; agents?: string[]; model?: string; judge?: string; pattern?: string; cwd?: string; fullAuto?: boolean; text?: boolean; quiet?: boolean };
 
 function parseRunArgs(args: string[]): ParsedRun {
   const out: ParsedRun = {};
@@ -136,6 +137,7 @@ function parseRunArgs(args: string[]): ParsedRun {
     if (a === "--agent" || a === "-a") out.agent = args[++i];
     else if (a === "--agents") out.agents = (args[++i] ?? "").split(",");
     else if (a === "--model" || a === "-m") out.model = args[++i];
+    else if (a === "--judge") out.judge = args[++i];
     else if (a === "--pattern" || a === "-p") out.pattern = args[++i];
     else if (a === "--cwd") out.cwd = args[++i];
     else if (a === "--full-auto" || a === "-y") out.fullAuto = true;
@@ -347,6 +349,22 @@ async function probe(a: ReturnType<ReturnType<typeof createRegistry>["enabled"]>
   }
 }
 
+// ---- serve (web dashboard) ----------------------------------------------
+async function cmdServe(args: string[]) {
+  const { startServer } = await import("../web/server.js");
+  const { port: resolvePort } = await import("../ports.js");
+  const tailnet = args.includes("--tailnet");
+  const p = args.includes("--port") ? Number(args[args.indexOf("--port") + 1]) : resolvePort("dashboard");
+  startServer({ port: p });
+  if (tailnet) {
+    stdout.write("\nTo publish on the tailnet run:\n");
+    stdout.write(`  tailscale serve --bg --https 443 http://127.0.0.1:${p}\n\n`);
+  }
+  stdout.write("Press Ctrl+C to stop.\n");
+  // keep alive
+  process.on("SIGINT", () => exit(0));
+}
+
 // ---- recall (memory) -----------------------------------------------------
 async function cmdRecall(args: string[]) {
   const memory = await import("../memory/recall.js");
@@ -359,11 +377,11 @@ async function cmdRecall(args: string[]) {
 }
 
 // ---- runs (history from run store) ---------------------------------------
-function cmdRuns(args: string[]) {
+async function cmdRuns(args: string[]) {
   if (args[0] === "show") {
     const id = args[1];
     if (!id) { stderr.write("Usage: stackai runs show <id>\n"); exit(1); }
-    const run = store.getRun(id);
+    const run = await store.getRun(id);
     if (!run) { stderr.write(`Run ${id} not found.\n`); exit(1); }
     console.log(`Run ${run.id}`);
     console.log(`  pattern: ${run.pattern}`);
@@ -373,7 +391,7 @@ function cmdRuns(args: string[]) {
     if (run.winnerAgent) console.log(`  winner:  ${run.winnerAgent}`);
     if (run.spentUsd != null) console.log(`  spent:   $${run.spentUsd.toFixed(4)} / $${run.budgetUsd ?? "?"}`);
     if (run.iterations != null) console.log(`  iters:   ${run.iterations}`);
-    const cands = store.listCandidates(id);
+    const cands = await store.listCandidates(id);
     if (cands.length) {
       console.log("\n  candidates:");
       for (const c of cands) {
@@ -383,7 +401,7 @@ function cmdRuns(args: string[]) {
     }
     return;
   }
-  const runs = store.listRuns(20);
+  const runs = await store.listRuns(20);
   if (!runs.length) { console.log("No runs yet."); return; }
   console.log("Recent runs:");
   for (const r of runs) {
@@ -515,7 +533,7 @@ function usage(code: number) {
   console.log(`stackai — Stack Ai OS
 
 Usage:
-  stackai run "<task>" [--agent claude] [--model sonnet] [--cwd .] [--full-auto] [--text]
+  stackai run "<task>" [--pattern ensemble] [--agent claude] [--judge fugu] [--model sonnet] [--cwd .] [--full-auto] [--text]
   stackai models [--agent <name>]
   stackai doctor                          # probe all adapters
   stackai doctor-agent <name>             # smoke-test one adapter
@@ -530,6 +548,7 @@ Usage:
   stackai fleet
   stackai runs [show <id>]               # run history from the store
   stackai recall "<query>" [--code path] # query claude-mem + openclaw + graphify
+  stackai serve [--port N] [--tailnet]   # web dashboard (default :42719)
   stackai vault set <KEY> [value|stdin]   # store in macOS Keychain (encrypted)
   stackai vault get <KEY>
   stackai vault list

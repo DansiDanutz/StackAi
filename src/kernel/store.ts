@@ -6,11 +6,15 @@
  * separate layer; this is the fast structured store.)
  *
  * Uses node:sqlite (built into Node 24+) — no native dependency to compile.
+ * The import is dynamic + vite-ignored so it loads via Node at runtime only
+ * (vite/vitest can't transform experimental `node:` builtins).
  */
-import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { CONFIG_DIR } from "../config.js";
+
+type DatabaseSync = import("node:sqlite").DatabaseSync;
+const SQLiteCtor: Promise<any> = import(/* @vite-ignore */ "node:sqlite").then((m) => m.DatabaseSync);
 import type { AgentName, RunResult } from "../types.js";
 
 const DATA_DIR = process.env.STACKAI_DATA_DIR ?? path.resolve(CONFIG_DIR, "..", "data");
@@ -18,8 +22,9 @@ const DB_PATH = path.join(DATA_DIR, "run-store.sqlite");
 
 let _db: DatabaseSync | null = null;
 
-function db(): DatabaseSync {
+async function db(): Promise<DatabaseSync> {
   if (_db) return _db;
+  const DatabaseSync = await SQLiteCtor;
   mkdirSync(DATA_DIR, { recursive: true });
   const d = new DatabaseSync(DB_PATH);
   d.exec(`
@@ -112,20 +117,20 @@ function now(): string {
   return new Date().toISOString();
 }
 
-export function createRun(
+export async function createRun(
   pattern: string,
   task: string,
   opts?: { budgetUsd?: number; cwd?: string; id?: string }
-): string {
+): Promise<string> {
   const id = opts?.id ?? uuid();
-  db().prepare(
+  (await db()).prepare(
     "INSERT INTO runs (id, ts, pattern, task, status, budget_usd, spent_usd, iterations, cwd) VALUES (?,?,?,?,?,?,?,?,?)"
   ).run(id, now(), pattern, task, "running", opts?.budgetUsd ?? null, 0, 0, opts?.cwd ?? null);
   return id;
 }
 
-export function updateRun(id: string, patch: Partial<RunRecord>): void {
-  const d = db();
+export async function updateRun(id: string, patch: Partial<RunRecord>): Promise<void> {
+  const d = await db();
   const cur = d.prepare("SELECT * FROM runs WHERE id = ?").get(id) as Record<string, any> | undefined;
   if (!cur) return;
   const merged = { ...cur, ...stripUndefined(patch), ts: cur.ts };
@@ -144,9 +149,10 @@ export function updateRun(id: string, patch: Partial<RunRecord>): void {
   );
 }
 
-export function recordCandidate(runId: string, iteration: number, result: RunResult, model?: string, score?: number): string {
+export async function recordCandidate(runId: string, iteration: number, result: RunResult, model?: string, score?: number): Promise<string> {
   const id = uuid();
-  db().prepare(
+  const d = await db();
+  d.prepare(
     `INSERT INTO candidates (id, run_id, iteration, agent, model, exit_code, final_text, score, cost_usd, duration_ms, timed_out, session_id, ts)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
@@ -156,24 +162,24 @@ export function recordCandidate(runId: string, iteration: number, result: RunRes
   );
   // bump spent
   if (result.costUsd) {
-    db().prepare("UPDATE runs SET spent_usd = spent_usd + ? WHERE id = ?").run(result.costUsd, runId);
+    d.prepare("UPDATE runs SET spent_usd = spent_usd + ? WHERE id = ?").run(result.costUsd, runId);
   }
   return id;
 }
 
-export function getRun(id: string): RunRecord | undefined {
-  const row = db().prepare("SELECT * FROM runs WHERE id = ?").get(id) as Record<string, any> | undefined;
+export async function getRun(id: string): Promise<RunRecord | undefined> {
+  const row = (await db()).prepare("SELECT * FROM runs WHERE id = ?").get(id) as Record<string, any> | undefined;
   if (!row) return undefined;
   return rowToRun(row);
 }
 
-export function listRuns(limit = 50): RunRecord[] {
-  const rows = db().prepare("SELECT * FROM runs ORDER BY ts DESC LIMIT ?").all(limit) as Record<string, any>[];
+export async function listRuns(limit = 50): Promise<RunRecord[]> {
+  const rows = (await db()).prepare("SELECT * FROM runs ORDER BY ts DESC LIMIT ?").all(limit) as Record<string, any>[];
   return rows.map(rowToRun);
 }
 
-export function listCandidates(runId: string): CandidateRecord[] {
-  const rows = db().prepare("SELECT * FROM candidates WHERE run_id = ? ORDER BY iteration, score DESC").all(runId) as Record<string, any>[];
+export async function listCandidates(runId: string): Promise<CandidateRecord[]> {
+  const rows = (await db()).prepare("SELECT * FROM candidates WHERE run_id = ? ORDER BY iteration, score DESC").all(runId) as Record<string, any>[];
   return rows.map((r) => ({
     id: r.id, runId: r.run_id, iteration: r.iteration, agent: r.agent,
     model: r.model ?? undefined, exitCode: r.exit_code, finalText: r.final_text,
@@ -182,8 +188,8 @@ export function listCandidates(runId: string): CandidateRecord[] {
   }));
 }
 
-export function rateCandidate(runId: string, candidateId: string, rating: number, note?: string): void {
-  db().prepare(
+export async function rateCandidate(runId: string, candidateId: string, rating: number, note?: string): Promise<void> {
+  (await db()).prepare(
     "INSERT OR REPLACE INTO ratings (run_id, candidate_id, rating, note, ts) VALUES (?,?,?,?,?)"
   ).run(runId, candidateId, Math.max(1, Math.min(5, rating)), note ?? null, now());
 }

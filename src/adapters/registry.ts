@@ -24,6 +24,7 @@ import { PiAdapter } from "./pi.js";
 import { HermesAdapter } from "./hermes.js";
 import { ZcodeAdapter } from "./zcode.js";
 import { GenericAdapter } from "./generic.js";
+import { FuguAdapter } from "./fugu.js";
 
 /** Built-in factories. Anything not here falls through to GenericAdapter. */
 const BUILTIN_FACTORIES: Record<string, (cfg: AgentConfig) => AgentAdapter> = {
@@ -36,6 +37,8 @@ const BUILTIN_FACTORIES: Record<string, (cfg: AgentConfig) => AgentAdapter> = {
   pi: (cfg) => new PiAdapter(cfg),
   hermes: (cfg) => new HermesAdapter(cfg),
   zcode: (cfg) => new ZcodeAdapter(cfg),
+  // Cloud meta-orchestrator — registered even without a config entry, opt-in.
+  fugu: () => new FuguAdapter(),
 };
 
 export class AdapterRegistry {
@@ -47,6 +50,11 @@ export class AdapterRegistry {
   }
 
   private load() {
+    // Built-in cloud adapters that have no config entry are always available
+    // (they're opt-in via --judge fugu / --agent fugu). They appear in the fleet
+    // but only fire when explicitly invoked.
+    const CLOUD_BUILTINS = new Set(["fugu"]);
+
     for (const agentCfg of this.cfg.agents.agents) {
       if (!agentCfg.enabled) {
         this.disabled.add(agentCfg.name);
@@ -59,6 +67,14 @@ export class AdapterRegistry {
           ? new GenericAdapter(agentCfg)
           : null;
       if (adapter) this.adapters.set(agentCfg.name, adapter);
+    }
+
+    // Register cloud built-ins not present in config.
+    for (const name of CLOUD_BUILTINS) {
+      if (!this.adapters.has(name as AgentName) && !this.disabled.has(name as AgentName)) {
+        const factory = BUILTIN_FACTORIES[name];
+        if (factory) this.adapters.set(name as AgentName, factory({} as AgentConfig));
+      }
     }
   }
 

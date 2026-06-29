@@ -12,6 +12,8 @@
     "stackai": "tsx src/cli/index.ts",
     "doctor": "tsx src/cli/index.ts doctor",
     "test": "vitest run",
+    "test:integration": "tsx tests/store.integration.ts",
+    "test:all": "vitest run && tsx tests/store.integration.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },

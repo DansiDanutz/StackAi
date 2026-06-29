@@ -66,7 +66,7 @@ export async function runEnsemble(
   const timeoutSec = opts.timeoutSec ?? 900;
   const width = Math.min(opts.width ?? opts.agents.length, opts.agents.length);
 
-  const runId = createRun("ensemble", opts.task, { budgetUsd: budget, cwd: opts.cwd });
+  const runId = await createRun("ensemble", opts.task, { budgetUsd: budget, cwd: opts.cwd });
   let spentUsd = 0;
   let iterations = 0;
   const allCandidates: Candidate[] = [];
@@ -86,7 +86,7 @@ export async function runEnsemble(
         allCandidates.push(...roundCandidates);
         // record each
         for (const c of roundCandidates) {
-          recordCandidate(runId, iter, c.result, c.model);
+          await recordCandidate(runId, iter, c.result, c.model);
         }
       } else {
         // Refine the weakest candidate from the previous verdict.
@@ -104,13 +104,13 @@ export async function runEnsemble(
         if (similarity(beforeText, refined.result.finalText) >= CONVERGE_RATIO) {
           stoppedReason = "converged";
           allCandidates.push(refined);
-          recordCandidate(runId, iter, refined.result, refined.model);
+          await recordCandidate(runId, iter, refined.result, refined.model);
           lastVerdict = (await judge(opts, registry, router, policy, allCandidates.slice(-roundCandidatesCount(allCandidates, lastVerdict)), runId)).verdict;
           break;
         }
         // Replace the weak candidate in the working set for re-judging.
         allCandidates.push(refined);
-        recordCandidate(runId, iter, refined.result, refined.model);
+        await recordCandidate(runId, iter, refined.result, refined.model);
         // working set = the same width from the end
         roundCandidates = lastWorkingSet(allCandidates, opts.agents.length);
       }
@@ -147,14 +147,14 @@ export async function runEnsemble(
       spentUsd: spentUsd,
       iterations,
       meta: { stoppedReason, winnerLabel, verdictAction: lastVerdict?.action },
-    });
+    }).catch(() => {});
 
     return {
       runId, winner, winnerLabel, verdict: lastVerdict,
       iterations, spentUsd, allCandidates, stoppedReason,
     };
   } catch (e) {
-    updateRun(runId, { status: "failed", meta: { error: (e as Error).message } });
+    updateRun(runId, { status: "failed", meta: { error: (e as Error).message } }).catch(() => {});
     return {
       runId, winner: undefined, winnerLabel: undefined, verdict: lastVerdict,
       iterations, spentUsd, allCandidates, stoppedReason: "error",

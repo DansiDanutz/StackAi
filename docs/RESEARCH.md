@@ -12,9 +12,11 @@ we leverage it.
 
 | Project | Lang | Stars | What it is | How Stack Ai OS leverages it |
 |---|---|---|---|---|
+|---|---|---|---|---|
 | **[Agent Client Protocol (ACP)](https://github.com/agentclientprotocol/agent-client-protocol)** | Rust/schema | 3.5k | The standardizing wire protocol for editor↔agent + agent↔agent (JSON-RPC, `initialize`, capabilities). Apache-2.0. | **4 of our CLIs already speak ACP** (opencode `acp`, gemini `--acp`, kimi `acp`, zcode). We map ACP → our `AgentEvent` type so ACP-native agents get structured events without stream-json parsing. Our MCP two-way bus (Phase 5) treats ACP as a first-class transport alongside MCP stdio. |
 | **[Open Multi-Agent](https://github.com/open-multi-agent/open-multi-agent)** | TypeScript | — | "From a goal to a task DAG." A coordinator decomposes a goal into a DAG run on any LLM (Claude/OpenAI/Gemini/DeepSeek/local). Has a post-run dashboard. | **Same TS stack, same mission.** We adopt its **task-DAG decomposition** idea for our Phase 9 `divide-and-conquer` pattern (coordinator splits a task into a dependency graph of subtasks, fans out across agents, merges). Its DAG-executor + dashboard replay informed our web dashboard plan (Phase 7). |
 | **Mysti** (HN: item 46365105) | — | — | "Claude, Codex, and Gemini debate your code, then synthesize." | **This is exactly our ensemble + judge + synthesize loop** (Phase 2), validating the architecture. We generalize it to all 9 CLIs + dynamic adapters, add budget/convergence caps, and persist results. |
+| **[Sakana Fugu](https://sakana.ai/fugu/)** | API | — | Multi-agent orchestrator exposed as one OpenAI-compatible API. A "macro-level analogue of model merging" — composes frontier models (Claude/GPT/Gemini) at the system level. Two tiers: `fugu` (fast) + `fugu-ultra` (hard multi-step). [arXiv report](https://arxiv.org/html/2606.21228v1). | **Integrated as a cloud adapter + judge option** (`--judge fugu`). Fugu orchestrates *models*; Stack Ai OS orchestrates *tool-using CLIs* — complementary layers. Best fit: ranking our 9 CLI candidates (Fugu is built to evaluate/synthesize across frontier models). Opt-in and CLOUD (data leaves the machine): never used for private codebases by default. Key stored in the secure vault (`SAKANA_API_KEY`). |
 
 ## Tier 2 — Reference frameworks (study, don't depend on)
 

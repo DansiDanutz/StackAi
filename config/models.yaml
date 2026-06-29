@@ -43,6 +43,14 @@ models:
     providers:
       openclaude: qwen3-coder-480b
 
+  # Sakana Fugu — cloud meta-orchestrator (OpenAI-compatible). Opt-in.
+  - alias: fugu
+    providers:
+      fugu: fugu
+  - alias: fugu-ultra
+    providers:
+      fugu: fugu-ultra
+
 # Per-pattern defaults. `auto` = each agent uses its own defaultModel.
 defaults:
   solo:
