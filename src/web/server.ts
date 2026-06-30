@@ -134,7 +134,14 @@ export function startServer(opts: ServerOptions = {}): http.Server {
         const engine = parsed.engine ?? "gsd";
         const runOrchestration = (task: string) => {
           const orchestrator = new TaskOrchestrator(registry, router, scheduler, policy, {
-            task, agents: parsed.agents, maxLoops: parsed.maxLoops, cwd: parsed.cwd, onEvent,
+            task,
+            agents: parsed.agents,
+            maxLoops: parsed.maxLoops,
+            // full-auto posture so agents get write access to the cwd — without
+            // this, codex/claude run read-only and can't create files.
+            posture: "full-auto",
+            cwd: parsed.cwd,
+            onEvent,
           });
           void orchestrator.run().catch((e) => broadcast("error", { message: (e as Error).message }));
         };
