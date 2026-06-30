@@ -170,7 +170,10 @@ export const dashboardHtml = `<!DOCTYPE html>
   <!-- MODELS -->
   <section class="tab" id="models"><div id="models-table"></div></section>
   <!-- RUNS -->
-  <section class="tab" id="runs"><div id="runs-table"></div></section>
+  <section class="tab" id="runs">
+    <div id="runs-table"></div>
+    <div id="run-detail" style="margin-top:16px"></div>
+  </section>
   <!-- CONVERSATION -->
   <section class="tab" id="conversation">
     <div id="phase-bar" style="display:flex;gap:6px;margin-bottom:12px"></div>
@@ -388,11 +391,61 @@ function runsTable(runs){
       const err = r.meta && r.meta.error ? String(r.meta.error).slice(0,120) : '';
       const errTag = (r.status==='failed' && err) ? ' <span class="badge red" title="'+esc(err)+'">!</span>' : '';
       const taskTitle = err ? err : '';
-      return '<tr><td class="mono">'+esc(String(r.id).slice(0,10))+'</td><td>'+statusBadge(r.pattern)+'</td>'+statusCell(r.status)+errTag+'<td>'+(r.winnerAgent?esc(r.winnerAgent):'<span class="dim">—</span>')+'</td><td>'+(r.spentUsd!=null?('$'+r.spentUsd.toFixed(3)):'—')+'</td><td title="'+esc(taskTitle)+'">'+esc(String(r.task).slice(0,60))+'</td></tr>';
+      return '<tr style="cursor:pointer" data-run="'+esc(r.id)+'"><td class="mono">'+esc(String(r.id).slice(0,10))+'</td><td>'+statusBadge(r.pattern)+'</td>'+statusCell(r.status)+errTag+'<td>'+(r.winnerAgent?esc(r.winnerAgent):'<span class="dim">—</span>')+'</td><td>'+(r.spentUsd!=null?('$'+r.spentUsd.toFixed(3)):'—')+'</td><td title="'+esc(taskTitle)+'">'+esc(String(r.task).slice(0,60))+'</td></tr>';
     }).join('')
     +'</tbody></table>';
 }
-async function loadRuns(){ const r=await get('/api/runs'); $('runs-table').innerHTML = (r.runs?.length)?runsTable(r.runs):'<div class="empty">No runs yet.</div>'; }
+async function loadRuns(){
+  const r=await get('/api/runs');
+  $('runs-table').innerHTML = (r.runs?.length)?runsTable(r.runs):'<div class="empty">No runs yet.</div>';
+  // Wire row clicks → load the run detail.
+  document.querySelectorAll('#runs-table tr[data-run]').forEach(tr => {
+    tr.onclick = () => loadRunDetail(tr.dataset.run);
+  });
+}
+
+// Run detail view — reconstructs the task, result, and agent phases from the store.
+async function loadRunDetail(id){
+  const detail = $('run-detail'); if (!detail) return;
+  detail.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const d = await get('/api/runs/'+id);
+    const r = d.run || {};
+    const cands = d.candidates || [];
+    const meta = r.meta || {};
+    const phases = Array.isArray(meta.phases) ? meta.phases : [];
+    const result = r.winnerText || '';
+    const NL = String.fromCharCode(10);
+    // Phase timeline
+    const phaseRows = phases.map(p => '<tr><td class="mono">'+esc(p.phase)+'</td><td>'+esc(p.agent)+'</td><td>'+(p.durationMs!=null?((p.durationMs/1000).toFixed(1)+'s'):'—')+'</td></tr>').join('');
+    // Candidates (agent attempts)
+    const candRows = cands.map(c => {
+      const txt = c.final_text || '';
+      const errTag = c.exit_code ? ' <span class="badge red">exit '+c.exit_code+'</span>' : '';
+      return '<tr><td>'+esc(c.agent)+'</td><td>'+esc(String(c.iteration))+'</td>'+errTag+'<td>'+(txt?'<span class="badge green">'+txt.length+' chars</span>':'<span class="badge dim">empty</span>')+'</td></tr>';
+    }).join('');
+    detail.innerHTML =
+      '<div class="result-panel" style="border-color:var(--border)">' +
+        '<div class="rp-head"><span class="rp-title">'+statusCell(r.status).replace('<td>','').replace('</td>','')+' '+esc(String(r.task).slice(0,80))+'</span>' +
+        '<span class="rp-actions"><span class="badge dim mono">'+esc(String(r.id).slice(0,12))+'</span></span></div>' +
+        '<div class="rp-body">' +
+          '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">' +
+            '<span><span class="dim">Pattern:</span> '+esc(r.pattern||'—')+'</span>' +
+            '<span><span class="dim">Winner:</span> '+(r.winnerAgent?esc(r.winnerAgent):'—')+'</span>' +
+            '<span><span class="dim">Iterations:</span> '+esc(String(r.iterations ?? '—'))+'</span>' +
+            '<span><span class="dim">Spent:</span> '+(r.spentUsd!=null?('$'+r.spentUsd.toFixed(3)):'—')+'</span>' +
+            '<span><span class="dim">When:</span> '+esc(r.ts||'—')+'</span>' +
+          '</div>' +
+          (result ? '<h3 style="font-size:13px;color:var(--dim);margin:0 0 6px">RESULT</h3><div class="rp-code" style="margin-bottom:14px">'+esc(result.slice(0,3000))+(result.length>3000?'…':'')+'</div>' : '') +
+          (meta.error ? '<div style="color:var(--red);margin-bottom:14px">✗ '+esc(String(meta.error).slice(0,300))+'</div>' : '') +
+          (phaseRows ? '<h3 style="font-size:13px;color:var(--dim);margin:0 0 6px">PHASES</h3><table style="margin-bottom:14px"><thead><tr><th>Phase</th><th>Agent</th><th>Duration</th></tr></thead><tbody>'+phaseRows+'</tbody></table>' : '') +
+          (candRows ? '<h3 style="font-size:13px;color:var(--dim);margin:0 0 6px">AGENT ATTEMPTS</h3><table><thead><tr><th>Agent</th><th>Iter</th><th>Output</th></tr></thead><tbody>'+candRows+'</tbody></table>' : '') +
+        '</div>' +
+      '</div>';
+  } catch(e) {
+    detail.innerHTML = '<div class="empty">Failed to load: '+esc(e.message)+'</div>';
+  }
+}
 function statusBadge(p){ const m={ensemble:'purple',solo:'blue',judge:'yellow'}; return '<span class="badge '+(m[p]||'dim')+'">'+esc(p)+'</span>'; }
 function statusCell(s){ const m={done:'green',running:'yellow',failed:'red',cancelled:'dim'}; return '<td><span class="badge '+(m[s]||'dim')+'">'+esc(s)+'</span></td>'; }
 

@@ -232,6 +232,14 @@ describe("dashboard server endpoints", () => {
     expect(r.body).toContain("Download");
   });
 
+  it("dashboard HTML contains clickable run rows + run-detail container", async () => {
+    const r = await get("/");
+    expect(r.status).toBe(200);
+    expect(r.body).toContain('id="run-detail"');
+    expect(r.body).toContain("loadRunDetail");
+    expect(r.body).toContain("data-run");
+  });
+
   it("POST /api/task/answer returns 404 when no question is pending", async () => {
     const r = await post("/api/task/answer", { questionId: "nope", answers: {} });
     expect(r.status).toBe(404);
