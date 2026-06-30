@@ -491,8 +491,8 @@ function showResultPanel(status, output, iterations) {
   if (!panel) return;
   if (status !== 'done' || !output || !output.trim()) { panel.innerHTML = ''; return; }
   lastResultOutput = output;
-  const lines = output.split('\n').length;
-  const isCode = /\n|function|def |class |import |const |=>|return /.test(output) && lines > 2;
+  const lines = output.split(String.fromCharCode(10)).length;
+  const isCode = output.includes(String.fromCharCode(10)) && /(function|def |class |import |const |=>|return )/.test(output) && lines > 2;
   const meta = '<div class="rp-meta">'+lines+' lines · '+(iterations!=null?iterations+' iteration(s) · ':'')+output.length+' chars</div>';
   panel.innerHTML =
     '<div class="result-panel">' +
@@ -511,8 +511,8 @@ function showResultPanel(status, output, iterations) {
     });
   };
   $('rp-download').onclick = () => {
-    const isPy = /def |import |print\(/.test(output);
-    const isJs = /function |const |=>|console\./.test(output);
+    const isPy = output.includes('def ') || output.includes('import ') || output.includes('print(');
+    const isJs = output.includes('function ') || output.includes('const ') || output.includes('=>') || output.includes('console.');
     const ext = isPy ? 'py' : isJs ? 'js' : isCode ? 'txt' : 'md';
     const blob = new Blob([lastResultOutput], { type: 'text/plain' });
     const a = document.createElement('a');
