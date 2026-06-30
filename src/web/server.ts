@@ -93,7 +93,7 @@ export function startServer(opts: ServerOptions = {}): http.Server {
       // ---- POST: start a task from the dashboard (in-process orchestrator) ----
       if (req.method === "POST" && path === "/api/task") {
         const body = await readBody(req);
-        let parsed: { task?: string; agents?: string[]; maxLoops?: number; cwd?: string; attachments?: string[]; engine?: string };
+        let parsed: { task?: string; agents?: string[]; maxLoops?: number; cwd?: string; attachments?: string[]; engine?: string; fullAuto?: boolean };
         try { parsed = JSON.parse(body); } catch { return json(res, { error: "invalid JSON" }, 400); }
         const taskRaw = (parsed.task ?? "").trim();
         if (!taskRaw) return json(res, { error: "task is required" }, 400);
@@ -137,9 +137,10 @@ export function startServer(opts: ServerOptions = {}): http.Server {
             task,
             agents: parsed.agents,
             maxLoops: parsed.maxLoops,
-            // full-auto posture so agents get write access to the cwd — without
-            // this, codex/claude run read-only and can't create files.
-            posture: "full-auto",
+            // Optional full-auto: agents get write access to the cwd. Off by
+            // default because full-auto makes codex/claude do real file I/O
+            // (slow); the default cautious posture returns code as text fast.
+            posture: parsed.fullAuto ? "full-auto" : undefined,
             cwd: parsed.cwd,
             onEvent,
           });

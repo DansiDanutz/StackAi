@@ -152,6 +152,9 @@ export const dashboardHtml = `<!DOCTYPE html>
           <option value="fast">Fast (immediate)</option>
         </select>
       </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding-bottom:2px" title="Give agents write access to the working dir (slower — they create real files)">
+        <input type="checkbox" id="task-fullauto"> Write files
+      </label>
       <input type="file" id="file-input" multiple style="display:none">
       <button class="attach" id="attach-btn" title="Attach files or images">📎 Attach</button>
       <button class="run" id="task-run">Run task ▸</button>
@@ -337,6 +340,7 @@ async function submitTask() {
   const paths = attachments.filter(a => a.path).map(a => a.path);
   const agentsRaw = $('task-agents').value;
   const engineRaw = $('task-engine') ? $('task-engine').value : 'gsd';
+  const fullAuto = $('task-fullauto') ? $('task-fullauto').checked : false;
   const btn = $('task-run');
   const hint = $('task-hint');
   btn.disabled = true; btn.textContent = 'Starting…';
@@ -344,7 +348,7 @@ async function submitTask() {
   try {
     const r = await fetch(API+'/api/task', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task, agents: agentsRaw ? [agentsRaw] : undefined, attachments: paths.length ? paths : undefined, engine: engineRaw })
+      body: JSON.stringify({ task, agents: agentsRaw ? [agentsRaw] : undefined, attachments: paths.length ? paths : undefined, engine: engineRaw, fullAuto })
     });
     const data = await r.json();
     if (!r.ok || !data.ok) throw new Error(data.error || 'submit failed');
