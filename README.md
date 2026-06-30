@@ -31,6 +31,16 @@ uniform interface.
 planned). The loop engine drives iterative refinement with **enforced** caps:
 budget, iterations, time, and diff-based convergence.
 
+**GSD-structured tasks.** The orchestrator scores task ambiguity (ported from
+GSD's spec-phase model) and asks clarifying questions when a task is unclear
+(GSD's discuss-phase gray-area engine) — then structures execution into a
+6-phase lifecycle (Planning → Orchestrating → Running → Testing → Looping →
+Delivered). The user sees and answers questions in the dashboard.
+
+**Adaptive agent fallback.** If an agent produces no output or errors (auth
+failure, crash), the orchestrator walks the entire fleet until one delivers —
+and tells you about each switch live. It only fails when every agent fails.
+
 **Add any CLI.** `stackai adapters add <name> <cmd> ...` registers arbitrary
 CLIs into the fleet via a config template — no code needed.
 
@@ -82,6 +92,36 @@ stackai vault import-env             # migrate .env → Keychain
 stackai vault set OPENAI_API_KEY     # prompts via stdin
 stackai vault list                   # names only (never values)
 ```
+
+---
+
+## Dashboard (web UI)
+
+The dashboard at **http://127.0.0.1:42719** is the primary interface. It runs
+every task through a live, structured lifecycle you can watch in real time.
+
+### Write a task
+Type your task in the **New task** box at the top. Click **📎 Attach** (or
+drag-drop) to add files/images — they're saved to disk and their paths injected
+into the prompt so every agent reads them. Press **⌘↵** or **Run task ▸**.
+
+### GSD clarify (asks when a task is unclear)
+With the **GSD** engine selected (default), the orchestrator first scores your
+task's ambiguity. If it's vague ("make it better", "build an app"), the task
+**pauses** and you get interactive question cards in the Conversation tab —
+each with concrete options + a recommended choice. Pick your answers, click
+**Submit answers**, and the decisions lock into the task before orchestration
+starts. Switch to the **Fast** engine to skip clarification for speed.
+
+### Watch it run live
+The **Conversation** tab shows the phase bar lighting up (Planning → Delivered),
+each agent's output streaming in, and agent switches when the orchestrator
+recovers from a failed agent by trying the next one in the fleet.
+
+### Get the result
+When the task delivers, the **Result panel** appears at the top with the final
+output, a **📋 Copy** button, and a **⬑ Download** button (auto-detects `.py` /
+`.js` / `.md`). The **Runs** tab holds the full history.
 
 ---
 
