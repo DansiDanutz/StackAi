@@ -87,4 +87,5 @@ export function doneTextEvents(text: string): AgentEvent[] {
 export const mockRouter: ModelRouter = {
   resolve: () => undefined,
   aliases: () => [],
+  describe: () => [],
 };

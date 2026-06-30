@@ -10,6 +10,8 @@
  * + normalize loop is identical for all 9 CLIs.
  */
 import { spawn } from "node:child_process";
+import { homedir } from "node:os";
+import { existsSync } from "node:fs";
 import { runAcpSession } from "../mcp/acp.js";
 import { resolveSecret } from "../security/vault.js";
 import type {
@@ -43,6 +45,32 @@ function injectVaultKeys(): NodeJS.ProcessEnv {
     }
   }
   return out;
+}
+
+/**
+ * Standard macOS tool directories where the 9 CLIs get installed (npm global,
+ * Homebrew, cargo, pnpm, user-local). The launchd daemon inherits a near-empty
+ * PATH, so spawned agents can't resolve their own executables. We prepend every
+ * dir that actually exists on this machine; non-existent entries are skipped so
+ * we never pollute PATH with noise.
+ */
+const TOOL_DIRS = [
+  "/opt/homebrew/bin",
+  "/opt/homebrew/sbin",
+  "/usr/local/bin",
+  `${homedir()}/.local/bin`,
+  `${homedir()}/.npm-global/bin`,
+  `${homedir()}/.brv-cli/bin`,
+  `${homedir()}/Library/pnpm`,
+  `${homedir()}/.cargo/bin`,
+  `${homedir()}/.grok/bin`,
+];
+
+/** Prepend any missing tool dirs to PATH so spawned agents resolve. */
+function augmentPath(existing?: string): string {
+  const have = new Set((existing ?? "").split(":").filter(Boolean));
+  const prepend = TOOL_DIRS.filter((d) => existsSync(d) && !have.has(d));
+  return prepend.length ? [...prepend, existing ?? ""].filter(Boolean).join(":") : (existing ?? "");
 }
 
 export abstract class BaseAdapter implements AgentAdapter {
@@ -112,6 +140,11 @@ export abstract class BaseAdapter implements AgentAdapter {
     // to resolve auth conflicts (e.g. codex: strip OPENAI_API_KEY so it uses its
     // ChatGPT OAuth login instead of a conflicting env key).
     const childEnv: NodeJS.ProcessEnv = { ...process.env, ...injectVaultKeys(), ...env };
+    // Ensure spawned agents can find their executables. The launchd daemon runs
+    // with a minimal PATH (/usr/bin:/bin), so CLIs installed via npm/homebrew/
+    // cargo (codex, gemini, claude, kimi, …) are invisible to it. Augment PATH
+    // with the standard macOS tool dirs; entries that don't exist are harmless.
+    childEnv.PATH = augmentPath(childEnv.PATH);
     for (const k of Object.keys(childEnv)) {
       if (childEnv[k] === "") delete childEnv[k];
     }

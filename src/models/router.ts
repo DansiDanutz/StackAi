@@ -35,11 +35,12 @@ export class ModelRouterImpl implements ModelRouter {
     return [...this.byAlias.keys()];
   }
 
-  /** Human-readable resolution map (for `stackai models`). */
-  describe(agent?: AgentName): Array<{ alias: string; resolved?: string }> {
+  /** Human-readable resolution map (for `stackai models` + dashboard). */
+  describe(agent?: AgentName): Array<{ alias: string; resolved?: string; providers: Partial<Record<AgentName, string>> }> {
     return [...this.byAlias.entries()].map(([alias, providers]) => ({
       alias,
       resolved: agent ? providers[agent] : undefined,
+      providers,
     }));
   }
 }

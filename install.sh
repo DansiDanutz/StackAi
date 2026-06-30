@@ -105,6 +105,13 @@ if [[ "$NO_DAEMON" -eq 0 ]]; then
   </array>
   <key>WorkingDirectory</key>
   <string>${PROJECT_DIR}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>${PATH}:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>${HOME}</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>

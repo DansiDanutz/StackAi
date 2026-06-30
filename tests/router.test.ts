@@ -47,11 +47,21 @@ describe("ModelRouterImpl", () => {
     expect(router.aliases().sort()).toEqual(["gpt5", "qwen-local", "sonnet"]);
   });
 
-  it("describe() returns alias + optional resolved id", () => {
+  it("describe() returns alias + optional resolved id + providers map", () => {
     const desc = router.describe("codex");
     const gpt5 = desc.find((d) => d.alias === "gpt5");
     expect(gpt5?.resolved).toBe("gpt-5-codex");
     const sonnet = desc.find((d) => d.alias === "sonnet");
     expect(sonnet?.resolved).toBeUndefined(); // codex isn't a sonnet provider
+  });
+
+  it("describe() exposes the full providers map (regression: dashboard columns)", () => {
+    const desc = router.describe();
+    const gpt5 = desc.find((d) => d.alias === "gpt5");
+    // The dashboard renders one column per agent using `alias.providers[agent]`.
+    // Before the fix, `describe()` dropped this field → every column was "—".
+    expect(gpt5?.providers).toEqual({ codex: "gpt-5-codex" });
+    const qwen = desc.find((d) => d.alias === "qwen-local");
+    expect(qwen?.providers).toEqual({ pi: "qwen3:8b", openclaude: "qwen3-8b" });
   });
 });

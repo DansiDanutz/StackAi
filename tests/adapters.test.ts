@@ -17,10 +17,11 @@ import { PiAdapter } from "../src/adapters/pi.js";
 import type { AgentConfig, ModelRouter } from "../src/config.js";
 import type { AgentName } from "../src/types.js";
 
-const noopRouter: ModelRouter = { resolve: () => undefined, aliases: () => [] };
+const noopRouter: ModelRouter = { resolve: () => undefined, aliases: () => [], describe: () => [] };
 const routerWith = (map: Record<string, Record<string, string>>): ModelRouter => ({
   resolve: (a, alias) => map[alias]?.[a],
   aliases: () => Object.keys(map),
+  describe: () => [],
 });
 
 const agentCfg = (name: AgentName): AgentConfig => ({

@@ -140,12 +140,106 @@ describe("dashboard server endpoints", () => {
     expect(r.status).toBe(200);
   });
 
+  it("POST /api/task rejects an empty task with 400", async () => {
+    const r = await post("/api/task", { task: "   " });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/task/i);
+  });
+
+  it("POST /api/task accepts a task and returns ok immediately", async () => {
+    // The orchestrator runs detached; the endpoint responds right away with
+    // { ok, task }. We don't wait for the (real) agents to finish — CI must
+    // stay offline-safe. The broadcast/event flow is covered by the
+    // conversation-bridge test.
+    const r = await post("/api/task", { task: "write a unit test" });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.task).toBe("write a unit test");
+  });
+
+  it("POST /api/upload saves an attachment and returns its path", async () => {
+    // "hello" in base64.
+    const r = await post("/api/upload", { name: "notes.txt", type: "text/plain", data: Buffer.from("hello world").toString("base64") });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.path).toMatch(/notes.*\.txt$/);
+    expect(r.body.originalName).toBe("notes.txt");
+  });
+
+  it("POST /api/upload rejects a missing name/data with 400", async () => {
+    const r = await post("/api/upload", { name: "x" });
+    expect(r.status).toBe(400);
+  });
+
+  it("POST /api/task injects attachment paths into the task prompt", async () => {
+    // Upload a real file, then submit a task referencing it. The returned task
+    // must include the attachment path so agents know what to read.
+    const up = await post("/api/upload", { name: "spec.md", type: "text/markdown", data: Buffer.from("# spec").toString("base64") });
+    expect(up.body.path).toBeTruthy();
+    const r = await post("/api/task", { task: "implement this spec", attachments: [up.body.path] });
+    expect(r.status).toBe(200);
+    // The injected prompt names the attached file + tells agents to read it.
+    expect(r.body.task).toContain("Attached files");
+    expect(r.body.task).toContain(up.body.path);
+    expect(r.body.task).toContain("implement this spec");
+  });
+
   it("GET / returns the dashboard HTML", async () => {
     const r = await get("/");
     expect(r.status).toBe(200);
     expect(typeof r.body).toBe("string");
     expect(r.body).toContain("Stack");
     expect(r.body).toContain("Ai OS");
+  });
+
+  it("dashboard HTML contains the task compose box", async () => {
+    const r = await get("/");
+    expect(r.status).toBe(200);
+    // The compose box is the task entry point — it must be present in the SPA.
+    expect(r.body).toContain('id="task-input"');
+    expect(r.body).toContain('id="task-run"');
+    expect(r.body).toContain("/api/task");
+  });
+
+  it("dashboard HTML contains the attachment drag-drop UI", async () => {
+    const r = await get("/");
+    expect(r.status).toBe(200);
+    expect(r.body).toContain('id="attach-chips"');
+    expect(r.body).toContain('id="file-input"');
+    expect(r.body).toContain("/api/upload");
+    // A visible Attach button (not just a hidden input) must be present so the
+    // user can attach without knowing how to drag-and-drop.
+    expect(r.body).toContain('id="attach-btn"');
+    expect(r.body).toContain("Attach");
+  });
+
+  it("dashboard HTML contains the clarify UI + engine selector", async () => {
+    const r = await get("/");
+    expect(r.status).toBe(200);
+    expect(r.body).toContain('id="clarify-area"');
+    expect(r.body).toContain('id="task-engine"');
+    expect(r.body).toContain("GSD");
+    expect(r.body).toContain("/api/task/answer");
+  });
+
+  it("dashboard HTML contains the result panel for delivered output", async () => {
+    const r = await get("/");
+    expect(r.status).toBe(200);
+    expect(r.body).toContain('id="result-panel"');
+    expect(r.body).toContain("showResultPanel");
+    // Copy + Download buttons must be wired so the user can extract the result.
+    expect(r.body).toContain("Copy");
+    expect(r.body).toContain("Download");
+  });
+
+  it("POST /api/task/answer returns 404 when no question is pending", async () => {
+    const r = await post("/api/task/answer", { questionId: "nope", answers: {} });
+    expect(r.status).toBe(404);
+  });
+
+  it("POST /api/task/answer rejects missing fields with 400", async () => {
+    const r = await post("/api/task/answer", {});
+    expect(r.status).toBe(400);
   });
 
   it("GET /unknown returns 404", async () => {

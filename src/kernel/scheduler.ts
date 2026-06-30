@@ -84,12 +84,16 @@ export class Scheduler {
       job.req.posture = this.policy.effectivePosture(job.req);
 
       const iter = job.adapter.run(job.req, job.router);
-      let exitCode = 0, finalText = "", sessionId: string | undefined, costUsd: number | undefined, timedOut = false;
+      let exitCode = 0, finalText = "", error: string | undefined, sessionId: string | undefined, costUsd: number | undefined, timedOut = false;
 
       for await (const evt of iter) {
         if (this.cancelled.get(job)) { timedOut = true; break; }
         events.push(evt);
         job.onEvent?.(job.req.agent, evt);
+        // Capture agent-reported errors (auth failure, CLI crash, rate limit).
+        // These arrive as { type: "error", message } — keep the first non-empty
+        // one; it explains why finalText is empty / exitCode is non-zero.
+        if (evt.type === "error" && evt.message && !error) error = evt.message;
         // Accumulate assistant text as it streams (some CLIs' done event has
         // empty finalText — the content arrives via assistant text events).
         if (evt.type === "assistant" && evt.subtype === "text") finalText += evt.text;
@@ -105,7 +109,7 @@ export class Scheduler {
       }
 
       job.resolve({
-        agent: job.req.agent, exitCode, finalText, sessionId, events,
+        agent: job.req.agent, exitCode, finalText, error, sessionId, events,
         durationMs: Date.now() - start, costUsd, timedOut,
       });
     } catch (e) {

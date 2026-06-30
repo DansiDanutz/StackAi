@@ -19,7 +19,7 @@
  */
 import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import type { AgentName, AgentEvent, RunRequest, RunResult } from "../types.js";
+import type { AgentName, AgentEvent, AgentAdapter, RunRequest, RunResult } from "../types.js";
 import type { AdapterRegistry } from "../adapters/registry.js";
 import type { ModelRouter } from "../types.js";
 import type { Scheduler } from "../kernel/scheduler.js";
@@ -55,6 +55,7 @@ export interface TaskMessage {
 export type TaskEvent =
   | { kind: "phase"; phase: Phase; iteration?: number; ts: string }
   | { kind: "message"; message: TaskMessage }
+  | { kind: "agent-switch"; phase: Phase; from: AgentName; to: AgentName; reason: string; ts: string }
   | { kind: "done"; result: TaskResult };
 
 export interface TaskOrchestratorOptions {
@@ -89,6 +90,8 @@ export interface TaskResult {
   phases: TaskPhaseRecord[];
   conversation: TaskMessage[];
   finalOutput: string;
+  /** Agent-reported failure reason when status is "failed". */
+  error?: string;
   iterations: number;
   verdict?: Verdict;
   status: "delivered" | "failed";
@@ -105,6 +108,8 @@ export const PHASE_PROMPTS: Record<string, string> = {
 export class TaskOrchestrator {
   private messages: TaskMessage[] = [];
   private phases: TaskPhaseRecord[] = [];
+  /** Last agent-reported error, carried into the final delivery summary. */
+  private lastError: string | undefined;
 
   constructor(
     private registry: AdapterRegistry,
@@ -188,59 +193,109 @@ export class TaskOrchestrator {
       // Record the final delivery as a message from the coder to the user.
       this.recordMessage("delivered", team.coder, undefined, implementation, iterations);
 
-      try { await updateRun(runId, { status: status === "delivered" ? "done" : "failed", winnerAgent: team.coder, winnerText: implementation.slice(0, 5000), iterations, meta: { pattern: "task", phases: this.phases.map((p) => ({ phase: p.phase, agent: p.agent, durationMs: p.durationMs })), verdictAction: verdict?.action, loopCount: iterations } }); } catch { /* best-effort */ }
+      // On failure, append the captured agent error to the delivered message so
+      // the user sees *why* it failed in the Conversation tab + Runs table.
+      try { await updateRun(runId, { status: status === "delivered" ? "done" : "failed", winnerAgent: team.coder, winnerText: implementation.slice(0, 5000), iterations, meta: { pattern: "task", phases: this.phases.map((p) => ({ phase: p.phase, agent: p.agent, durationMs: p.durationMs })), verdictAction: verdict?.action, loopCount: iterations, error: status === "failed" ? this.lastError : undefined } }); } catch { /* best-effort */ }
 
       return this.result(runId, status, iterations, verdict, start);
     } catch (e) {
       const msg = (e as Error).message;
       try { await updateRun(runId, { status: "failed", meta: { error: msg } }); } catch { /* best-effort */ }
       this.recordMessage("delivered", this.resolveTeam().planner, undefined, `[task failed: ${msg}]`, iterations);
+      this.lastError = msg;
       return this.result(runId, "failed", iterations, verdict, start);
     }
   }
 
-  /** Run one phase's agent, capturing its output as a conversation message. */
+  /**
+   * Run one phase's agent, capturing its output as a conversation message.
+   *
+   * Adaptive fallback: the orchestrator always has the last word. If the
+   * primary agent produces no text or errors (empty output, 401, crash), we
+   * walk down the rest of the enabled fleet until an agent delivers real
+   * output. Each switch is broadcast so the user sees recovery happening live.
+   * Only when every agent fails do we give up — and even then the error reason
+   * is surfaced, never silently swallowed.
+   */
   private async runPhase(
     phase: Phase, agent: AgentName, task: string, prior: string, runId: string, iteration: number
   ): Promise<string> {
-    const adapter = this.registry.require(agent);
     const promptTemplate = PHASE_PROMPTS[phase] ?? "{{task}}";
     const prompt = promptTemplate.replace(/\{\{task\}\}/g, task).replace(/\{\{prior\}\}/g, prior);
-
-    const req: RunRequest = {
-      agent, prompt, model: this.opts.model,
-      posture: this.opts.posture, verbosity: "stream-json",
-      cwd: this.opts.cwd, timeoutSec: this.opts.timeoutSec ?? 600,
-      label: `task:${phase}`,
-    };
-
     const phaseStart = Date.now();
-    // Retry a phase once on failure — some agents (codex ChatGPT OAuth) 401
-    // intermittently; a single retry absorbs the transient auth blip.
-    let result: RunResult;
-    const attempt = async (): Promise<RunResult> => {
-      const h = this.scheduler.submit(adapter, this.router, req, (a, evt) =>
-        this.opts.onAgentEvent?.(phase, a, evt));
-      return h.done;
-    };
-    result = await attempt();
-    if (result.exitCode !== 0 && !result.finalText) {
-      // Transient failure (auth/network) — retry once after a brief pause.
-      await new Promise((r) => setTimeout(r, 1500));
-      result = await attempt();
+
+    // Build the fallback chain: primary agent first, then the rest of the
+    // enabled fleet (excluding the primary + already-tried). We skip cloud-only
+    // adapters like fugu unless it's the only option.
+    const chain = this.fallbackChain(agent);
+
+    let finalAgent = agent;
+    let result: RunResult | undefined;
+    let lastError: string | undefined;
+    let prevAgent: AgentName | undefined;
+
+    for (const candidate of chain) {
+      // If we've moved past the primary agent, tell the user we're switching.
+      if (prevAgent) {
+        const reason = (lastError ?? "no output").slice(0, 120);
+        this.opts.onEvent?.({ kind: "agent-switch", phase, from: prevAgent, to: candidate, reason, ts: new Date().toISOString() });
+        this.recordMessage(phase, prevAgent, candidate, `[switch] ${prevAgent} failed (${reason}) → trying ${candidate}`, iteration);
+      }
+      const adapter = this.registry.require(candidate);
+      const req: RunRequest = {
+        agent: candidate, prompt, model: this.opts.model,
+        posture: this.opts.posture, verbosity: "stream-json",
+        cwd: this.opts.cwd, timeoutSec: this.opts.timeoutSec ?? 600,
+        label: `task:${phase}`,
+      };
+      // Retry a transient failure (auth blip) once before moving on.
+      result = await this.tryOnce(adapter, req, phase);
+      if (result.exitCode !== 0 && !result.finalText && !result.error) {
+        await new Promise((r) => setTimeout(r, 1200));
+        result = await this.tryOnce(adapter, req, phase);
+      }
+
+      // Did this agent deliver usable output?
+      if (result.finalText && result.finalText.trim().length > 0) {
+        finalAgent = candidate;
+        break;
+      }
+      // No usable output — record the error and try the next agent.
+      lastError = result.error || "produced no output";
+      if (result.error) this.recordMessage(phase, candidate, undefined, `[error] ${candidate}: ${result.error}`, iteration);
+      prevAgent = candidate;
     }
 
-    const output = result.finalText;
-    this.phases.push({ phase, agent, output, durationMs: Date.now() - phaseStart, iteration });
+    const output = result?.finalText || (lastError ? `[error] ${lastError}` : "");
+    const hasError = !output || output.startsWith("[error]");
+    this.phases.push({ phase, agent: finalAgent, output, durationMs: Date.now() - phaseStart, iteration });
 
-    // Record in store + as a conversation message.
-    try { await recordCandidate(runId, iteration, result, this.opts.model, undefined); } catch { /* best-effort */ }
+    try { if (result) await recordCandidate(runId, iteration, result, this.opts.model, undefined); } catch { /* best-effort */ }
 
-    // Determine the handoff target (next phase's agent).
     const nextAgent = this.nextAgentFor(phase);
-    this.recordMessage(phase, agent, nextAgent, output, iteration);
-
+    this.recordMessage(phase, finalAgent, nextAgent, output, iteration);
+    if (hasError) this.lastError = lastError;
     return output;
+  }
+
+  /** Submit one attempt; return the RunResult. */
+  private async tryOnce(adapter: AgentAdapter, req: RunRequest, phase: Phase): Promise<RunResult> {
+    const h = this.scheduler.submit(adapter, this.router, req, (a, evt) =>
+      this.opts.onAgentEvent?.(phase, a, evt));
+    return h.done;
+  }
+
+  /**
+   * Build the agent fallback chain for a phase: the primary agent first, then
+   * every other enabled agent in fleet order. Used so the orchestrator can
+   * recover by handing off to a different agent when the primary fails.
+   */
+  private fallbackChain(primary: AgentName): AgentName[] {
+    const chain: AgentName[] = [primary];
+    for (const a of this.registry.enabled()) {
+      if (a.name !== primary) chain.push(a.name);
+    }
+    return chain;
   }
 
   /** Emit a phase-transition event. */
@@ -306,7 +361,8 @@ export class TaskOrchestrator {
 
     const result: TaskResult = {
       runId, task: this.opts.task, phases: this.phases, conversation: this.messages,
-      finalOutput, iterations, verdict, status, totalDurationMs: Date.now() - start,
+      finalOutput, error: status === "failed" ? this.lastError : undefined,
+      iterations, verdict, status, totalDurationMs: Date.now() - start,
     };
     this.opts.onEvent?.({ kind: "done", result });
     return result;

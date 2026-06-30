@@ -8,6 +8,8 @@
  *   GET  /api/models        → model aliases
  *   GET  /api/runs          → recent runs from the store
  *   GET  /api/runs/:id      → run detail + candidates
+ *   POST /api/upload        → save a drag-drop attachment, returns its path
+ *   POST /api/task          → start a 6-phase task from the dashboard (in-process)
  *   GET  /api/fleet/tailnet → Tailscale peer list
  *   WS   /ws                → live event stream (run progress, fleet changes)
  *
@@ -15,7 +17,10 @@
  * the dashboard is reachable at https://dans-mac-studio.tailc56ca0.ts.net
  */
 import http from "node:http";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { join, extname } from "node:path";
+import { tmpdir } from "node:os";
 import { loadConfig } from "../config.js";
 import { createRegistry } from "../adapters/registry.js";
 import { ModelRouterImpl } from "../models/router.js";
@@ -23,6 +28,10 @@ import * as store from "../kernel/store.js";
 import { getTailnetPeers } from "../kernel/tailnet.js";
 import { dashboardHtml } from "./dashboard.js";
 import { port as resolvePort, dashboardTailscaleUrl } from "../ports.js";
+import { defaultPolicy } from "../safety/policy.js";
+import { Scheduler } from "../kernel/scheduler.js";
+import { TaskOrchestrator, type TaskEvent } from "../orchestrator/task.js";
+import { clarifyTask, type ClarifyResult, type ClarifyQuestion } from "../orchestrator/clarify.js";
 
 export interface ServerOptions {
   port?: number;
@@ -51,9 +60,143 @@ export function startServer(opts: ServerOptions = {}): http.Server {
         }
       }
 
+      // ---- POST: upload a file/image attachment (drag-drop or attach button) ----
+      // Saves to a per-session temp dir and returns the absolute path. The path
+      // is then passed to POST /api/task, which injects it into the prompt so
+      // every agent (codex/claude/gemini) can read the file from disk.
+      if (req.method === "POST" && path === "/api/upload") {
+        const body = await readBody(req);
+        let parsed: { name?: string; type?: string; data?: string };
+        try { parsed = JSON.parse(body); } catch { return json(res, { error: "invalid JSON" }, 400); }
+        const name = (parsed.name ?? "").trim();
+        const data = (parsed.data ?? "").trim();
+        if (!name || !data) return json(res, { error: "name and data are required" }, 400);
+        // Reject obviously oversized payloads (64 MB) to protect the daemon.
+        if (data.length > 64 * 1024 * 1024) return json(res, { error: "file too large (max 64 MB)" }, 413);
+
+        const dir = resolveUploadDir();
+        try { mkdirSync(dir, { recursive: true }); } catch { /* exists */ }
+        // Sanitize the filename: keep the extension, strip path components, append
+        // a short uuid to avoid collisions between uploads of the same name.
+        const ext = extname(name).toLowerCase();
+        const base = name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 48).replace(/\.[^.]+$/, "");
+        const safeName = `${base}-${randomUUID().slice(0, 8)}${ext}`;
+        const fullPath = join(dir, safeName);
+        try {
+          writeFileSync(fullPath, Buffer.from(data, "base64"));
+        } catch (e) {
+          return json(res, { error: `write failed: ${(e as Error).message}` }, 500);
+        }
+        return json(res, { ok: true, path: fullPath, name: safeName, originalName: name, type: parsed.type ?? "" });
+      }
+
+      // ---- POST: start a task from the dashboard (in-process orchestrator) ----
+      if (req.method === "POST" && path === "/api/task") {
+        const body = await readBody(req);
+        let parsed: { task?: string; agents?: string[]; maxLoops?: number; cwd?: string; attachments?: string[]; engine?: string };
+        try { parsed = JSON.parse(body); } catch { return json(res, { error: "invalid JSON" }, 400); }
+        const taskRaw = (parsed.task ?? "").trim();
+        if (!taskRaw) return json(res, { error: "task is required" }, 400);
+
+        // Inject attachment paths into the task prompt so every agent reads them.
+        const taskBase = injectAttachments(taskRaw, parsed.attachments);
+
+        const cfg = loadConfig();
+        const registry = createRegistry(cfg);
+        const router = new ModelRouterImpl(cfg.models);
+        const policy = defaultPolicy();
+        const scheduler = new Scheduler(policy, { concurrency: 2 });
+
+        // Broadcast orchestrator events directly to WS clients (same process —
+        // no HTTP loopback needed, unlike the CLI path which posts to /api/events).
+        const onEvent = (evt: TaskEvent) => {
+          if (evt.kind === "phase") {
+            broadcast("phase", { phase: evt.phase, iteration: evt.iteration });
+          } else if (evt.kind === "message") {
+            broadcast("conversation", evt.message);
+          } else if (evt.kind === "agent-switch") {
+            broadcast("agent-switch", { phase: evt.phase, from: evt.from, to: evt.to, reason: evt.reason });
+          } else if (evt.kind === "done") {
+            broadcast("done", {
+              runId: evt.result.runId,
+              status: evt.result.status,
+              error: evt.result.error,
+              finalOutput: evt.result.finalOutput ?? "",
+              iterations: evt.result.iterations,
+            });
+          }
+        };
+
+        // GSD engine: clarify FIRST, then orchestrate. The clarifier scores the
+        // task's ambiguity (GSD spec-phase model). If ambiguous, it pauses and
+        // asks the user clarifying questions (GSD discuss-phase model) before
+        // proceeding. The "fast" engine skips clarification for speed.
+        const engine = parsed.engine ?? "gsd";
+        const runOrchestration = (task: string) => {
+          const orchestrator = new TaskOrchestrator(registry, router, scheduler, policy, {
+            task, agents: parsed.agents, maxLoops: parsed.maxLoops, cwd: parsed.cwd, onEvent,
+          });
+          void orchestrator.run().catch((e) => broadcast("error", { message: (e as Error).message }));
+        };
+
+        if (engine === "fast") {
+          runOrchestration(taskBase);
+          return json(res, { ok: true, task: taskBase });
+        }
+
+        // GSD engine: run the clarifier detached, then decide.
+        void (async () => {
+          try {
+            const clarify: ClarifyResult = await clarifyTask(registry, router, scheduler, policy, taskBase, {
+              cwd: parsed.cwd,
+              onMessage: (msg) => broadcast("conversation", { phase: "planning", fromAgent: "clarifier", content: msg }),
+            });
+            if (clarify.clear) {
+              runOrchestration(taskBase);
+              return;
+            }
+            // Ambiguous — pause and ask the user. Generate a question id and
+            // await the answer via the pending-clarify protocol.
+            const questionId = "clarify-" + Date.now().toString(36);
+            broadcast("clarify", { questionId, questions: clarify.questions });
+            const answers = await new Promise<Record<string, string>>((resolve) => {
+              pendingClarify = { questionId, questions: clarify.questions, resolve };
+            });
+            // Fold the user's answers into the task as locked decisions.
+            runOrchestration(foldDecisions(taskBase, clarify.questions, answers));
+          } catch (e) {
+            broadcast("error", { message: (e as Error).message });
+          }
+        })();
+
+        return json(res, { ok: true, task: taskBase });
+      }
+
+      // ---- POST: answer a clarifying question (resumes a paused task) ----
+      if (req.method === "POST" && path === "/api/task/answer") {
+        const body = await readBody(req);
+        let parsed: { questionId?: string; answers?: Record<string, string> };
+        try { parsed = JSON.parse(body); } catch { return json(res, { error: "invalid JSON" }, 400); }
+        if (!parsed.questionId || !parsed.answers) return json(res, { error: "questionId and answers are required" }, 400);
+        const pending = pendingClarify;
+        if (!pending || pending.questionId !== parsed.questionId) {
+          return json(res, { error: "no matching pending question" }, 404);
+        }
+        pendingClarify = null;
+        pending.resolve(parsed.answers);
+        broadcast("conversation", { phase: "planning", fromAgent: "clarifier", content: "Answers received. Locking decisions and starting orchestration." });
+        return json(res, { ok: true });
+      }
+
       // ---- static dashboard ----
       if (path === "/" || path === "/index.html") {
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        // no-cache: the dashboard is a single inline-SPA. Without this header
+        // the browser serves a stale cached copy after a rebuild, so UI fixes
+        // (button wiring, attachment logic, …) silently never reach the user.
+        res.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+        });
         res.end(dashboardHtml);
         return;
       }
@@ -180,6 +323,18 @@ function acceptWebSocket(req: http.IncomingMessage, socket: import("node:stream"
 type WritableClient = { write: (data: string | Buffer) => boolean; destroy: () => void };
 export const WS_CLIENTS = new Set<WritableClient>();
 
+// ── Pending-clarify state (pause/resume protocol) ───────────────────────────
+// When the clarifier finds an ambiguous task, the orchestrator pauses and waits
+// for the user to answer the clarifying questions. This holds the resolver the
+// paused task is awaiting; POST /api/task/answer resolves it with the answers.
+// One pending question at a time — the daemon is single-user.
+interface PendingClarify {
+  questionId: string;
+  questions: ClarifyQuestion[];
+  resolve: (answers: Record<string, string>) => void;
+}
+let pendingClarify: PendingClarify | null = null;
+
 /** Broadcast a JSON event to all connected dashboard clients. */
 export function broadcast(type: string, data: unknown): void {
   const payload = JSON.stringify({ type, data });
@@ -215,4 +370,73 @@ function readBody(req: http.IncomingMessage): Promise<string> {
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
+}
+
+/**
+ * Resolve the attachment upload directory. Uses STACKAI_DATA_DIR if set
+ * (matches the store), otherwise a stack-ai-os/ dir under the OS tmpdir.
+ */
+function resolveUploadDir(): string {
+  const base = process.env.STACKAI_DATA_DIR ?? join(tmpdir(), "stack-ai-os");
+  return join(base, "uploads");
+}
+
+/** MIME types treated as images (so the prompt says "image" not "file"). */
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"]);
+
+/**
+ * Inject attachment file paths into the task prompt. Each existing path is
+ * referenced by its absolute location so agents can read it. Non-existent
+ * paths are skipped (they may have been cleaned up or forged).
+ *
+ * Example output:
+ *   <original task>
+ *
+ *   --- Attached files ---
+ *   - /tmp/.../screenshot.png  (image)
+ *   - /tmp/.../spec.md  (file)
+ *   Read these attachments to complete the task above.
+ */
+function injectAttachments(task: string, attachments?: string[]): string {
+  if (!attachments || attachments.length === 0) return task;
+  const valid = attachments.filter((p) => {
+    try { return existsSync(p); } catch { return false; }
+  });
+  if (valid.length === 0) return task;
+  const lines = valid.map((p) => {
+    const isImage = IMAGE_EXTS.has(extname(p).toLowerCase());
+    return `- ${p}  (${isImage ? "image" : "file"})`;
+  });
+  return `${task}\n\n--- Attached files ---\n${lines.join("\n")}\nRead these attachments to complete the task above.`;
+}
+
+/**
+ * Fold the user's clarifying answers into the task as LOCKED DECISIONS. This is
+ * GSD's core "discuss once, lock forever" principle — downstream agents see the
+ * decisions and must not re-question them. Answers the user didn't provide get
+ * the recommended option as a default.
+ *
+ * Example output appended to the task:
+ *   === LOCKED DECISIONS (do not re-question) ===
+ *   - Output format: CLI script (a runnable .py file)
+ *   - Language: Python
+ */
+function foldDecisions(
+  task: string,
+  questions: ClarifyQuestion[],
+  answers: Record<string, string>,
+): string {
+  const lines: string[] = [];
+  for (const q of questions) {
+    const answer = answers[q.id];
+    if (answer && answer.trim()) {
+      lines.push(`- ${q.header}: ${answer.trim()}`);
+    } else {
+      // No answer → use the recommended option (GSD --auto fallback).
+      const rec = q.options.find((o) => o.recommended) ?? q.options[0];
+      if (rec) lines.push(`- ${q.header}: ${rec.label}`);
+    }
+  }
+  if (lines.length === 0) return task;
+  return `${task}\n\n=== LOCKED DECISIONS (do not re-question) ===\n${lines.join("\n")}`;
 }

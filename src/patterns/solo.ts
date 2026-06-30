@@ -49,6 +49,7 @@ export async function runSolo(
   const events: AgentEvent[] = [];
   let exitCode = 0;
   let finalText = "";
+  let error: string | undefined;
   let sessionId: string | undefined;
   let costUsd: number | undefined;
   let timedOut = false;
@@ -56,6 +57,8 @@ export async function runSolo(
   for await (const evt of adapter.run(req, router)) {
     events.push(evt);
     opts.onEvent?.(opts.agent, evt);
+    // Capture agent-reported errors (auth failure, CLI crash, rate limit).
+    if (evt.type === "error" && evt.message && !error) error = evt.message;
     // Accumulate streamed assistant text (some CLIs' done event has empty
     // finalText — content arrives via assistant text events).
     if (evt.type === "assistant" && evt.subtype === "text") finalText += evt.text;
@@ -75,6 +78,7 @@ export async function runSolo(
     agent: opts.agent,
     exitCode,
     finalText,
+    error,
     sessionId,
     events,
     durationMs: Date.now() - start,

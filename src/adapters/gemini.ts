@@ -69,15 +69,33 @@ export class GeminiAdapter extends BaseAdapter {
   }
 
   /**
-   * Parse gemini stream-json events. Gemini emits JSON objects keyed by event
-   * type (e.g. {text: ...}, {toolCall: ...}, {turnComplete: true}). The exact
-   * schema varies by build; we handle the documented shapes defensively.
+   * Parse gemini stream-json events. The real output schema (verified against a
+   * live `gemini -p … -o stream-json` run) is:
+   *
+   *   {"type":"init","session_id":"…","model":"auto"}
+   *   {"type":"message","role":"user","content":"…"}
+   *   {"type":"message","role":"assistant","content":"Hello","delta":true}
+   *   {"type":"result","status":"success","stats":{…}}
+   *
+   * Older SDK builds also emit {text}, {thought:true,text}, {turnComplete},
+   * {toolCall}, {usageMetadata} — we keep those fallbacks for compatibility.
    */
   parseEvent(raw: unknown): AgentEvent | null {
     if (typeof raw !== "object" || raw === null) return null;
     const e = raw as Record<string, any>;
 
-    if (typeof e.text === "string") {
+    // ── New schema: { type: "message", role, content, delta? } ──
+    if (e.type === "message" && e.role === "assistant" && typeof e.content === "string") {
+      return { type: "assistant", subtype: "text", text: e.content };
+    }
+    // New schema: { type: "result", status } marks completion.
+    if (e.type === "result") {
+      const ok = e.status !== "error" && e.status !== "failed";
+      return { type: "done", exitCode: ok ? 0 : 1, finalText: "" };
+    }
+
+    // ── Legacy schema fallbacks ──
+    if (typeof e.text === "string" && e.type !== "message") {
       return { type: "assistant", subtype: "text", text: e.text };
     }
     if (e.thought === true && typeof e.text === "string") {
@@ -100,11 +118,7 @@ export class GeminiAdapter extends BaseAdapter {
       };
     }
     if (e.turnComplete === true || e.finishReason) {
-      return {
-        type: "done",
-        exitCode: 0,
-        finalText: typeof e.text === "string" ? e.text : "",
-      };
+      return { type: "done", exitCode: 0, finalText: typeof e.text === "string" ? e.text : "" };
     }
     if (e.usageMetadata) {
       return {

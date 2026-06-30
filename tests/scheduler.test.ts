@@ -113,6 +113,48 @@ describe("scheduler finalText accumulation (regression: the critical bug)", () =
   });
 });
 
+describe("scheduler error capture (regression: failures were invisible)", () => {
+  it("captures an agent error event into result.error", async () => {
+    // codex/gemini shape: agent exits 0 but emits an error in its JSON stream
+    // (e.g. auth failure, rate limit). The scheduler MUST surface this so the
+    // orchestrator + dashboard can explain the failure.
+    const adapter = new MockAdapter({
+      events: [
+        { type: "error", message: "401 Unauthorized: invalid API key", recoverable: false },
+        { type: "done", exitCode: 0, finalText: "" },
+      ],
+    });
+    const result = await scheduler().submit(adapter, mockRouter, {
+      agent: "mock", prompt: "x", verbosity: "stream-json",
+    }).done;
+    expect(result.error).toBe("401 Unauthorized: invalid API key");
+    expect(result.finalText).toBe("");
+  });
+
+  it("keeps the first error when multiple are emitted", async () => {
+    const adapter = new MockAdapter({
+      events: [
+        { type: "error", message: "first error", recoverable: false },
+        { type: "error", message: "second error", recoverable: false },
+        { type: "done", exitCode: 1, finalText: "" },
+      ],
+    });
+    const result = await scheduler().submit(adapter, mockRouter, {
+      agent: "mock", prompt: "x", verbosity: "stream-json",
+    }).done;
+    expect(result.error).toBe("first error");
+  });
+
+  it("leaves result.error undefined when no error event fires", async () => {
+    const adapter = new MockAdapter({ events: streamedTextEvents("all good") });
+    const result = await scheduler().submit(adapter, mockRouter, {
+      agent: "mock", prompt: "x", verbosity: "stream-json",
+    }).done;
+    expect(result.error).toBeUndefined();
+    expect(result.finalText).toBe("all good");
+  });
+});
+
 describe("scheduler concurrency + cancellation", () => {
   it("runs multiple jobs (within concurrency limit)", async () => {
     const sched = scheduler();

@@ -374,8 +374,8 @@ async function cmdTask(args: string[]) {
     stdout.write(`  time:   ${(result.totalDurationMs / 1000).toFixed(1)}s\n`);
     if (notePath) stdout.write(`  vault:  ${notePath}\n`);
     if (result.status === "failed") {
-      const lastMsg = result.conversation[result.conversation.length - 1];
-      if (lastMsg?.content) stdout.write(`  ${"\x1b[31m"}error:  ${lastMsg.content.slice(0, 200)}${"\x1b[0m"}\n`);
+      const reason = result.error ?? result.conversation[result.conversation.length - 1]?.content;
+      if (reason) stdout.write(`  ${"\x1b[31m"}error:  ${reason.slice(0, 200)}${"\x1b[0m"}\n`);
     }
     if (out && result.status === "delivered") {
       const written = result.conversation.find((m: any) => m.content?.startsWith("[written to"));
@@ -583,7 +583,7 @@ async function probe(a: ReturnType<ReturnType<typeof createRegistry>["enabled"]>
   try {
     const { cmd } = a.buildCommand(
       { agent: a.name, prompt: "OK", verbosity: "text" } as never,
-      { resolve: () => undefined, aliases: () => [] }
+      { resolve: () => undefined, aliases: () => [], describe: () => [] }
     );
     const { existsSync } = await import("node:fs");
     const baseCmd = cmd === "node" ? "/usr/bin/env" : cmd;

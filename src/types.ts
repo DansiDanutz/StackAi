@@ -78,6 +78,10 @@ export interface RunResult {
   agent: AgentName;
   exitCode: number;
   finalText: string;
+  /** Error message if the agent emitted an error event (auth failure, CLI crash,
+   *  rate limit, etc.). Surface this to the user — a non-empty error explains
+   *  *why* finalText is empty / exitCode is non-zero. */
+  error?: string;
   sessionId?: string;
   events: AgentEvent[];
   durationMs: number;
@@ -101,4 +105,5 @@ export interface AgentAdapter {
 export interface ModelRouter {
   resolve(agent: AgentName, alias: string): string | undefined;
   aliases(): string[];
+  describe(agent?: AgentName): Array<{ alias: string; resolved?: string; providers: Partial<Record<AgentName, string>> }>;
 }

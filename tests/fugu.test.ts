@@ -48,7 +48,7 @@ describe("FuguAdapter", () => {
 
   describe("buildCommand", () => {
     it("returns a marker (cloud — no child process)", () => {
-      const r = a.buildCommand({ agent: "fugu", prompt: "x" } as never, { resolve: () => undefined, aliases: () => [] });
+      const r = a.buildCommand({ agent: "fugu", prompt: "x" } as never, { resolve: () => undefined, aliases: () => [], describe: () => [] });
       expect(r.cmd).toBe("fugu-api");
     });
   });

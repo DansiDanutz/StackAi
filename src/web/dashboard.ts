@@ -62,6 +62,59 @@ export const dashboardHtml = `<!DOCTYPE html>
   .footer { color:var(--dim); font-size:12px; text-align:center; padding:24px; border-top:1px solid var(--border); margin-top:24px; }
   .score-bar { display:inline-block; width:48px; height:6px; background:var(--panel2); border-radius:3px; overflow:hidden; vertical-align:middle; }
   .score-fill { height:100%; background:linear-gradient(90deg,var(--red),var(--yellow),var(--green)); }
+  /* Compose box — the task entry point */
+  .compose { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:20px; }
+  .compose label { display:block; font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+  .compose textarea { width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:12px; font:14px/1.5 -apple-system,sans-serif; resize:vertical; min-height:72px; }
+  .compose textarea:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(96,165,250,.15); }
+  .compose .controls { display:flex; gap:10px; align-items:flex-end; margin-top:10px; flex-wrap:wrap; }
+  .compose .field { flex:1; min-width:200px; }
+  .compose select { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:9px 10px; font:13px -apple-system,sans-serif; width:100%; }
+  .compose button.run { background:var(--accent); color:#0a0e14; border:none; border-radius:8px; padding:10px 22px; font-weight:600; font-size:14px; cursor:pointer; }
+  .compose button.run:hover { filter:brightness(1.1); }
+  .compose button.run:disabled { opacity:.5; cursor:not-allowed; }
+  .compose button.attach { background:transparent; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:9px 16px; font-size:14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+  .compose button.attach:hover { border-color:var(--accent); color:var(--accent); }
+  .compose .hint { font-size:12px; color:var(--dim); margin-top:8px; }
+  /* Attachments — drag-drop zone + file chips */
+  .compose.drag-over { border-color:var(--accent); box-shadow:0 0 0 3px rgba(96,165,250,.2); }
+  .drop-hint { font-size:12px; color:var(--dim); margin-top:6px; }
+  .drop-hint a { color:var(--accent); cursor:pointer; text-decoration:underline; }
+  .attach-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; min-height:0; }
+  .attach-chips:empty { display:none; }
+  .chip { display:inline-flex; align-items:center; gap:6px; background:var(--panel2); border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-size:12px; max-width:240px; }
+  .chip img { width:20px; height:20px; border-radius:3px; object-fit:cover; }
+  .chip .chip-icon { font-size:14px; }
+  .chip .chip-name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chip .chip-x { cursor:pointer; color:var(--dim); font-size:14px; line-height:1; padding:0 2px; }
+  .chip .chip-x:hover { color:var(--red); }
+  .chip.uploading { opacity:.6; }
+  .chip.uploading .chip-x { color:var(--yellow); animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:.4; } }
+  /* Clarify cards — interactive questions when a task is ambiguous */
+  .clarify-card { background:var(--panel2); border:1px solid var(--border); border-left:3px solid var(--purple); border-radius:8px; padding:14px; margin:10px 0; }
+  .clarify-card .cq-header { font-size:11px; color:var(--purple); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+  .clarify-card .cq-question { font-weight:600; margin-bottom:10px; }
+  .clarify-card .cq-options { display:flex; flex-direction:column; gap:6px; }
+  .clarify-card .cq-opt { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:9px 12px; cursor:pointer; font-size:13px; transition:border-color .15s; }
+  .clarify-card .cq-opt:hover { border-color:var(--accent); }
+  .clarify-card .cq-opt.selected { border-color:var(--accent); background:rgba(96,165,250,.1); }
+  .clarify-card .cq-opt .cq-rec { font-size:10px; color:var(--green); margin-left:6px; }
+  .clarify-card .cq-opt .cq-desc { display:block; color:var(--dim); font-size:11px; margin-top:2px; }
+  .clarify-card.locked .cq-opt { cursor:default; opacity:.7; }
+  .clarify-submit { background:var(--purple); color:#0a0e14; border:none; border-radius:8px; padding:10px 20px; font-weight:600; cursor:pointer; margin-top:12px; }
+  .clarify-submit:hover { filter:brightness(1.1); }
+  .clarify-submit:disabled { opacity:.4; cursor:not-allowed; }
+  /* Result panel — the delivered output, front and center */
+  .result-panel { background:var(--panel); border:1px solid var(--accent); border-radius:10px; margin-top:16px; overflow:hidden; }
+  .result-panel .rp-head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:rgba(96,165,250,.08); border-bottom:1px solid var(--border); }
+  .result-panel .rp-title { font-weight:600; display:flex; align-items:center; gap:8px; }
+  .result-panel .rp-actions { display:flex; gap:8px; }
+  .result-panel .rp-btn { background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 12px; font-size:12px; cursor:pointer; }
+  .result-panel .rp-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .result-panel .rp-body { padding:16px; max-height:420px; overflow-y:auto; }
+  .result-panel .rp-code { font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:13px; white-space:pre-wrap; word-break:break-word; color:var(--green); line-height:1.6; }
+  .result-panel .rp-meta { font-size:11px; color:var(--dim); margin-top:8px; }
 </style>
 </head>
 <body>
@@ -82,6 +135,30 @@ export const dashboardHtml = `<!DOCTYPE html>
   </nav>
 </header>
 <main>
+  <!-- COMPOSE — where you write the task -->
+  <div class="compose" id="compose-box">
+    <label for="task-input">New task</label>
+    <textarea id="task-input" placeholder="Describe what you want built or answered…  (e.g. "write a Python is_prime function with tests")"></textarea>
+    <div class="attach-chips" id="attach-chips"></div>
+    <div class="controls">
+      <div class="field">
+        <label for="task-agents">Agents (optional team)</label>
+        <select id="task-agents"><option value="">default team (auto)</option></select>
+      </div>
+      <div class="field" style="max-width:160px">
+        <label for="task-engine">Engine</label>
+        <select id="task-engine">
+          <option value="gsd" selected>GSD (clarify + structure)</option>
+          <option value="fast">Fast (immediate)</option>
+        </select>
+      </div>
+      <input type="file" id="file-input" multiple style="display:none">
+      <button class="attach" id="attach-btn" title="Attach files or images">📎 Attach</button>
+      <button class="run" id="task-run">Run task ▸</button>
+    </div>
+    <div class="hint" id="task-hint">Press <b>⌘↵</b> to run, or click <b>📎 Attach</b> to add files/images. The task runs through 6 phases (Planning → Delivered) — watch it live in the <b>Conversation</b> tab.</div>
+  </div>
+
   <!-- OVERVIEW -->
   <section class="tab active" id="overview">
     <div class="grid cards" id="stats"></div>
@@ -96,8 +173,11 @@ export const dashboardHtml = `<!DOCTYPE html>
   <section class="tab" id="runs"><div id="runs-table"></div></section>
   <!-- CONVERSATION -->
   <section class="tab" id="conversation">
-    <div id="phase-bar" style="display:flex;gap:6px;margin-bottom:16px"></div>
-    <div id="conv-transcript" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;height:480px;overflow-y:auto"></div>
+    <div id="phase-bar" style="display:flex;gap:6px;margin-bottom:12px"></div>
+    <div id="conv-status" style="display:none;align-items:center;gap:8px;margin-bottom:12px;padding:10px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px"></div>
+    <div id="clarify-area"></div>
+    <div id="result-panel"></div>
+    <div id="conv-transcript" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;height:380px;overflow-y:auto;margin-top:12px"></div>
   </section>
   <!-- STATS -->
   <section class="tab" id="stats"><div id="stats-content"></div></section>
@@ -159,7 +239,138 @@ async function loadFleet(){
     return \`<tr><td><b>\${esc(a.displayName)}</b> \${a.dynamic?'<span class="badge purple">dynamic</span>':''}</td><td class="mono">\${esc(a.name)}</td><td class="caps">\${tags}</td></tr>\`;
   }).join('');
   $('fleet-table').innerHTML = \`<table><thead><tr><th>Agent</th><th>id</th><th>Capabilities</th></tr></thead><tbody>\${rows}</tbody></table>\`;
+  // Populate the compose-box agent dropdown from the fleet.
+  const sel = $('task-agents');
+  if (sel) {
+    const preset = sel.value;
+    sel.innerHTML = '<option value="">default team (auto)</option>' +
+      (f.fleet??[]).map(a=>'<option value="'+esc(a.name)+'">'+esc(a.displayName)+'</option>').join('');
+    sel.value = preset;
+  }
 }
+
+// ---- Attachments (drag-drop + attach button) ----
+// attachments: [{ name, path, type, previewUrl? }] — path is filled after upload.
+let attachments = [];
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => { const s = String(fr.result); resolve(s.slice(s.indexOf(',') + 1)); };
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+function isImageType(type) { return String(type||'').startsWith('image/'); }
+function endsWithAny(name, exts) { const n = String(name||'').toLowerCase(); return exts.some(e => n.endsWith(e)); }
+function iconFor(type, name) {
+  if (isImageType(type)) return '🖼️';
+  if (endsWithAny(type, ['/pdf']) || endsWithAny(name, ['.pdf'])) return '📕';
+  if (endsWithAny(name, ['.md','.txt','.json','.yaml','.yml','.csv'])) return '📄';
+  if (endsWithAny(name, ['.zip','.tar','.gz','.tgz'])) return '🗜️';
+  return '📎';
+}
+
+function renderChips() {
+  const box = $('attach-chips'); if (!box) return;
+  box.innerHTML = attachments.map((a, i) => {
+    const preview = a.previewUrl ? '<img src="'+a.previewUrl+'">' : '<span class="chip-icon">'+iconFor(a.type, a.name)+'</span>';
+    const cls = a.uploading ? 'chip uploading' : 'chip';
+    const x = a.uploading ? '⏳' : '✕';
+    return '<span class="'+cls+'" data-i="'+i+'">'+preview+'<span class="chip-name">'+esc(a.name)+'</span><span class="chip-x" data-x="'+i+'">'+x+'</span></span>';
+  }).join('');
+}
+
+async function addFiles(files) {
+  const hint = $('task-hint');
+  for (const file of files) {
+    const idx = attachments.length;
+    attachments.push({ name: file.name, type: file.type || '', uploading: true });
+    renderChips();
+    try {
+      const base64 = await fileToBase64(file);
+      const r = await fetch(API+'/api/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, type: file.type, data: base64 }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'upload failed');
+      attachments[idx].path = d.path;
+      attachments[idx].uploading = false;
+      if (isImageType(file.type)) attachments[idx].previewUrl = URL.createObjectURL(file);
+    } catch (e) {
+      // Mark failed + remove after a beat.
+      hint.innerHTML = '<span style="color:var(--red)">Upload failed: '+esc(e.message)+'</span>';
+      attachments.splice(idx, 1);
+    }
+    renderChips();
+  }
+}
+
+// Wire the attach button + hidden file input.
+$('attach-btn').onclick = () => $('file-input').click();
+$('file-input').onchange = (e) => { const fs = [...(e.target.files||[])]; if (fs.length) addFiles(fs); e.target.value = ''; };
+
+// Drag-drop on the compose box.
+const composeBox = $('compose-box');
+['dragenter','dragover'].forEach(ev => composeBox.addEventListener(ev, (e) => { e.preventDefault(); composeBox.classList.add('drag-over'); }));
+['dragleave','drop'].forEach(ev => composeBox.addEventListener(ev, (e) => { e.preventDefault(); composeBox.classList.remove('drag-over'); }));
+composeBox.addEventListener('drop', (e) => { const fs = [...(e.dataTransfer?.files||[])]; if (fs.length) addFiles(fs); });
+
+// Allow removing a chip before submission.
+$('attach-chips').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-x]'); if (!t) return;
+  const i = Number(t.dataset.x); if (attachments[i] && !attachments[i].uploading) attachments.splice(i, 1);
+  renderChips();
+});
+
+// ---- Task submission (the compose box) ----
+async function submitTask() {
+  const task = $('task-input').value.trim();
+  if (!task) { $('task-input').focus(); return; }
+  // Wait for any uploads still in flight, then collect the paths.
+  const pending = attachments.filter(a => a.uploading);
+  if (pending.length) { $('task-hint').innerHTML = 'Waiting for <b>'+pending.length+'</b> upload(s) to finish…'; await new Promise(r => setTimeout(r, 400)); }
+  const paths = attachments.filter(a => a.path).map(a => a.path);
+  const agentsRaw = $('task-agents').value;
+  const engineRaw = $('task-engine') ? $('task-engine').value : 'gsd';
+  const btn = $('task-run');
+  const hint = $('task-hint');
+  btn.disabled = true; btn.textContent = 'Starting…';
+  hint.innerHTML = 'Submitting task to the orchestrator…';
+  try {
+    const r = await fetch(API+'/api/task', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task, agents: agentsRaw ? [agentsRaw] : undefined, attachments: paths.length ? paths : undefined, engine: engineRaw })
+    });
+    const data = await r.json();
+    if (!r.ok || !data.ok) throw new Error(data.error || 'submit failed');
+    // Clear the box, attachments, switch to the Conversation tab, reset the transcript.
+    $('task-input').value = '';
+    attachments = []; renderChips();
+    currentPhaseIdx = -1; renderPhaseBar();
+    const status = $('conv-status'); if (status) { status.style.display = 'none'; status.innerHTML = ''; }
+    clarifyState = null; renderClarifyCards();
+    const rp = $('result-panel'); if (rp) rp.innerHTML = '';
+    const tr = $('conv-transcript'); if (tr) tr.innerHTML = '';
+    // Show an immediate "working" message so the screen isn't blank during the
+    // 5-15s before the first agent event arrives.
+    appendConversationMsg({ phase: 'planning', fromAgent: 'orchestrator', content: '▸ Task received. Dispatching to the fleet — agents are thinking…' });
+    document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+    document.querySelector('nav button[data-tab="conversation"]').classList.add('active');
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    $('conversation').classList.add('active');
+    hint.innerHTML = 'Task started — agents are working. Watch the <b>Conversation</b> tab.';
+  } catch (e) {
+    hint.innerHTML = '<span style="color:var(--red)">Failed to start: '+esc(e.message)+'</span>';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Run task ▸';
+  }
+}
+$('task-run').onclick = submitTask;
+$('task-input').addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submitTask(); }
+});
 
 async function loadModels(){
   const m = await get('/api/models');
@@ -173,7 +384,12 @@ async function loadModels(){
 
 function runsTable(runs){
   return '<table><thead><tr><th>Run</th><th>Pattern</th><th>Status</th><th>Winner</th><th>Spent</th><th>Task</th></tr></thead><tbody>'+
-    runs.map(r=>'<tr><td class="mono">'+esc(String(r.id).slice(0,10))+'</td><td>'+statusBadge(r.pattern)+'</td>'+statusCell(r.status)+'<td>'+(r.winnerAgent?esc(r.winnerAgent):'<span class="dim">—</span>')+'</td><td>'+(r.spentUsd!=null?('$'+r.spentUsd.toFixed(3)):'—')+'</td><td>'+esc(String(r.task).slice(0,60))+'</td></tr>').join('')
+    runs.map(r=>{
+      const err = r.meta && r.meta.error ? String(r.meta.error).slice(0,120) : '';
+      const errTag = (r.status==='failed' && err) ? ' <span class="badge red" title="'+esc(err)+'">!</span>' : '';
+      const taskTitle = err ? err : '';
+      return '<tr><td class="mono">'+esc(String(r.id).slice(0,10))+'</td><td>'+statusBadge(r.pattern)+'</td>'+statusCell(r.status)+errTag+'<td>'+(r.winnerAgent?esc(r.winnerAgent):'<span class="dim">—</span>')+'</td><td>'+(r.spentUsd!=null?('$'+r.spentUsd.toFixed(3)):'—')+'</td><td title="'+esc(taskTitle)+'">'+esc(String(r.task).slice(0,60))+'</td></tr>';
+    }).join('')
     +'</tbody></table>';
 }
 async function loadRuns(){ const r=await get('/api/runs'); $('runs-table').innerHTML = (r.runs?.length)?runsTable(r.runs):'<div class="empty">No runs yet.</div>'; }
@@ -243,12 +459,129 @@ function renderPhaseBar() {
 function appendConversationMsg(m) {
   const el = $("conv-transcript"); if (!el) return;
   const line = document.createElement("div"); line.style.marginBottom = "12px";
-  const phaseTag = '<span class="badge purple" style="font-size:10px">'+(m.phase||'').toUpperCase()+'</span>';
-  const fromTag = '<b style="color:var(--cyan)">'+esc(m.fromAgent||'?')+'</b>';
+  const content = m.content || '';
+  const isError = content.startsWith('[error]') || content.toLowerCase().includes('task failed');
+  if (isError) line.style.borderLeft = "3px solid var(--red)";
+  const phaseTag = '<span class="badge '+(isError?'red':'purple')+'" style="font-size:10px">'+(m.phase||'').toUpperCase()+'</span>';
+  const fromTag = '<b style="color:'+(isError?'var(--red)':'var(--cyan)')+'">'+esc(m.fromAgent||'?')+'</b>';
   const toTag = m.toAgent ? ' <span style="color:var(--dim)">→ '+esc(m.toAgent)+'</span>' : '';
-  const body = '<div style="margin-top:4px;white-space:pre-wrap">'+esc((m.content||'').slice(0,600))+((m.content||'').length>600?'…':'')+'</div>';
+  const bodyColor = isError ? 'var(--red)' : 'var(--text)';
+  const body = '<div style="margin-top:4px;white-space:pre-wrap;color:'+bodyColor+'">'+esc(content.slice(0,600))+(content.length>600?'…':'')+'</div>';
   line.innerHTML = phaseTag+' '+fromTag+toTag+(m.iteration!=null?' <span class="badge dim">iter '+(m.iteration+1)+'</span>':'')+body;
   el.appendChild(line); el.scrollTop = el.scrollHeight;
+}
+
+// Show a delivered/failed banner above the transcript when the run ends.
+function showResultBanner(status, error) {
+  const bar = $("conv-status");
+  if (!bar) return;
+  if (status === "failed") {
+    bar.innerHTML = '<span class="badge red" style="padding:6px 12px">✗ FAILED</span>' +
+      (error ? ' <span style="color:var(--red)">'+esc(error.slice(0,200))+'</span>' : ' <span style="color:var(--dim)">see messages below</span>');
+  } else if (status === "done") {
+    bar.innerHTML = '<span class="badge green" style="padding:6px 12px">✓ DELIVERED</span> <span style="color:var(--dim)">task complete</span>';
+  }
+  bar.style.display = "flex";
+}
+
+// Show the delivered result in a prominent panel with Copy + Download.
+let lastResultOutput = '';
+function showResultPanel(status, output, iterations) {
+  const panel = $('result-panel');
+  if (!panel) return;
+  if (status !== 'done' || !output || !output.trim()) { panel.innerHTML = ''; return; }
+  lastResultOutput = output;
+  const lines = output.split('\n').length;
+  const isCode = /\n|function|def |class |import |const |=>|return /.test(output) && lines > 2;
+  const meta = '<div class="rp-meta">'+lines+' lines · '+(iterations!=null?iterations+' iteration(s) · ':'')+output.length+' chars</div>';
+  panel.innerHTML =
+    '<div class="result-panel">' +
+      '<div class="rp-head">' +
+        '<span class="rp-title"><span class="badge green">✓ Result</span> Delivered output</span>' +
+        '<span class="rp-actions">' +
+          '<button class="rp-btn" id="rp-copy">📋 Copy</button>' +
+          '<button class="rp-btn" id="rp-download">⬇ Download</button>' +
+        '</span>' +
+      '</div>' +
+      '<div class="rp-body"><div class="rp-code">'+esc(output)+'</div>'+meta+'</div>' +
+    '</div>';
+  $('rp-copy').onclick = () => {
+    navigator.clipboard.writeText(lastResultOutput).then(() => {
+      const b = $('rp-copy'); b.textContent = '✓ Copied!'; setTimeout(() => b.textContent = '📋 Copy', 1500);
+    });
+  };
+  $('rp-download').onclick = () => {
+    const isPy = /def |import |print\(/.test(output);
+    const isJs = /function |const |=>|console\./.test(output);
+    const ext = isPy ? 'py' : isJs ? 'js' : isCode ? 'txt' : 'md';
+    const blob = new Blob([lastResultOutput], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'stackai-result.' + ext;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Clarify cards — interactive questions when a task is ambiguous.
+let clarifyState = null; // { questionId, questions, answers: {} }
+function renderClarifyCards() {
+  const area = $('clarify-area'); if (!area) return;
+  if (!clarifyState) { area.innerHTML = ''; return; }
+  const cards = clarifyState.questions.map(q => {
+    const sel = clarifyState.answers[q.id];
+    const opts = q.options.map((o, oi) => {
+      const isSel = sel === o.label;
+      const rec = o.recommended ? '<span class="cq-rec">★ recommended</span>' : '';
+      const desc = o.description ? '<span class="cq-desc">'+esc(o.description)+'</span>' : '';
+      return '<div class="cq-opt'+(isSel?' selected':'')+'" data-q="'+esc(q.id)+'" data-opt="'+oi+'"><b>'+esc(o.label)+'</b>'+rec+desc+'</div>';
+    }).join('');
+    return '<div class="clarify-card"><div class="cq-header">'+esc(q.header)+'</div><div class="cq-question">'+esc(q.question)+'</div><div class="cq-options">'+opts+'</div></div>';
+  }).join('');
+  area.innerHTML = cards + '<button class="clarify-submit" id="clarify-submit">Submit answers ▸</button>';
+  // Wire option clicks (toggle selection within each question).
+  area.querySelectorAll('.cq-opt').forEach(el => {
+    el.onclick = () => {
+      const qid = el.dataset.q; const oi = Number(el.dataset.opt);
+      const q = clarifyState.questions.find(x => x.id === qid); if (!q) return;
+      clarifyState.answers[qid] = q.options[oi].label;
+      renderClarifyCards();
+    };
+  });
+  $('clarify-submit').onclick = submitClarifyAnswers;
+}
+async function submitClarifyAnswers() {
+  if (!clarifyState) return;
+  const btn = $('clarify-submit'); if (btn) { btn.disabled = true; btn.textContent = 'Locking decisions…'; }
+  try {
+    // Fill in recommended defaults for any unanswered questions.
+    const answers = {};
+    for (const q of clarifyState.questions) {
+      answers[q.id] = clarifyState.answers[q.id] || (q.options.find(o=>o.recommended)||q.options[0]||{}).label || '';
+    }
+    const r = await fetch(API+'/api/task/answer', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ questionId: clarifyState.questionId, answers }),
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.error || 'submit failed');
+    // Lock the cards so the user sees their final choices.
+    document.querySelectorAll('.clarify-card').forEach(c => c.classList.add('locked'));
+    const area = $('clarify-area');
+    area.querySelectorAll('.cq-opt').forEach(el => el.classList.remove('selected'));
+    // Re-apply selected styling for locked view.
+    for (const q of clarifyState.questions) {
+      const sel = answers[q.id];
+      area.querySelectorAll('.cq-opt').forEach(el => {
+        if (el.textContent.includes(sel)) el.classList.add('selected');
+      });
+    }
+    if (btn) btn.remove();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit answers ▸'; }
+    alert('Failed to submit answers: '+e.message);
+  }
 }
 renderPhaseBar();
 
@@ -266,8 +599,28 @@ function connectWS(){
     if (m.type === 'conversation' && m.data) {
       appendConversationMsg(m.data);
     }
-    if (m.type === 'done') {
+    if (m.type === 'agent-switch' && m.data) {
+      // The orchestrator recovered by switching agents — show it as a yellow
+      // system message so the user sees the fleet adapting in real time.
+      appendConversationMsg({ phase: m.data.phase, fromAgent: m.data.from, toAgent: m.data.to, content: '[switch] '+m.data.from+' → '+m.data.to+' ('+m.data.reason+')' });
+    }
+    if (m.type === 'clarify' && m.data) {
+      // The clarifier found ambiguity — render interactive question cards.
+      clarifyState = { questionId: m.data.questionId, questions: m.data.questions, answers: {} };
+      appendConversationMsg({ phase: 'planning', fromAgent: 'clarifier', content: '🤔 Before I start, I need to check a few things:' });
+      renderClarifyCards();
+      // Make sure we're on the Conversation tab so the user sees the questions.
+      document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+      document.querySelector('nav button[data-tab="conversation"]').classList.add('active');
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      $('conversation').classList.add('active');
+    }
+    if (m.type === 'done' && m.data) {
       currentPhaseIdx = PHASE_LIST.length - 1; renderPhaseBar();
+      // Show the delivered/failed banner — the error field explains failures.
+      showResultBanner(m.data.status, m.data.error);
+      // Show the delivered output in a prominent result panel with Copy/Download.
+      showResultPanel(m.data.status, m.data.finalOutput, m.data.iterations);
     }
     // Also log everything to the Live tab.
     const log = $('live-log');

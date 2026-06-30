@@ -18,6 +18,9 @@ data/*.sqlite-shm
 data/*.sqlite-wal
 data/run-store.sqlite*
 data/artifacts/
+data/daemon.log
+data/daemon.err.log
+data/uploads/
 
 # OS / editor
 .DS_Store
