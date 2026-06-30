@@ -256,13 +256,20 @@ export class TaskOrchestrator {
       }
 
       // Did this agent deliver usable output?
-      if (result.finalText && result.finalText.trim().length > 0) {
+      // Reject text that's actually an error message (auth failure, crash) —
+      // claude exits 0 with the error string as its text, so we can't rely on
+      // result.error alone. Detect known error patterns and fall through.
+      const text = result.finalText || "";
+      const looksLikeError = !text.trim() ||
+        /failed to authenticate|api error: \d{3}|401 unauthorized|connection (was )?closed|invalid api key|not authorized/i.test(text);
+      if (text.trim() && !looksLikeError) {
         finalAgent = candidate;
         break;
       }
       // No usable output — record the error and try the next agent.
-      lastError = result.error || "produced no output";
-      if (result.error) this.recordMessage(phase, candidate, undefined, `[error] ${candidate}: ${result.error}`, iteration);
+      const reason = result.error || (looksLikeError ? text.slice(0, 80) : "produced no output");
+      lastError = reason;
+      if (reason) this.recordMessage(phase, candidate, undefined, `[error] ${candidate}: ${reason}`, iteration);
       prevAgent = candidate;
     }
 
