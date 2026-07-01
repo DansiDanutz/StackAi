@@ -256,7 +256,6 @@ describe("dashboard server endpoints", () => {
     expect(r.body).toContain('id="task-cancel"');
     expect(r.body).toContain("/api/task/cancel");
   });
-  });
 
   it("POST /api/task/answer rejects missing fields with 400", async () => {
     const r = await post("/api/task/answer", {});
