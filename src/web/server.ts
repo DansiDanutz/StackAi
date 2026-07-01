@@ -32,6 +32,8 @@ import { defaultPolicy } from "../safety/policy.js";
 import { Scheduler } from "../kernel/scheduler.js";
 import { TaskOrchestrator, type TaskEvent } from "../orchestrator/task.js";
 import { clarifyTask, type ClarifyResult, type ClarifyQuestion } from "../orchestrator/clarify.js";
+import { runEnsemble } from "../patterns/ensemble.js";
+import type { AgentName } from "../types.js";
 
 export interface ServerOptions {
   port?: number;
@@ -149,6 +151,35 @@ export function startServer(opts: ServerOptions = {}): http.Server {
 
         if (engine === "fast") {
           runOrchestration(taskBase);
+          return json(res, { ok: true, task: taskBase });
+        }
+
+        if (engine === "ensemble") {
+          // Ensemble: multiple agents solve the same task in parallel, a judge
+          // picks the best. This is the platform's core differentiator.
+          const ensembleAgents = (parsed.agents ?? []).length >= 2
+            ? parsed.agents as AgentName[]
+            : ["codex", "gemini"]; // default to two diverse agents
+          broadcast("conversation", { phase: "planning", fromAgent: "orchestrator", content: "Ensemble mode: " + ensembleAgents.join(" + ") + " will solve this in parallel, then a judge picks the best." });
+          void runEnsemble(registry, router, scheduler, policy, {
+            task: taskBase,
+            agents: ensembleAgents,
+            judgeAgent: "codex",
+            maxIterations: 1,
+            cwd: parsed.cwd,
+            posture: parsed.fullAuto ? "full-auto" : undefined,
+            onEvent: (_phase, agent, evt) => {
+              if (evt.type === "assistant" && evt.subtype === "text") {
+                broadcast("conversation", { phase: "running", fromAgent: agent, content: evt.text.slice(0, 300) });
+              }
+            },
+          }).then((result) => {
+            broadcast("done", {
+              status: result.winner ? "done" : "failed",
+              finalOutput: result.winner?.result.finalText ?? "",
+              error: result.winner ? undefined : "no candidate produced output",
+            });
+          }).catch((e) => broadcast("error", { message: (e as Error).message }));
           return json(res, { ok: true, task: taskBase });
         }
 

@@ -152,6 +152,7 @@ export const dashboardHtml = `<!DOCTYPE html>
         <select id="task-engine">
           <option value="gsd" selected>GSD (clarify + structure)</option>
           <option value="fast">Fast (immediate)</option>
+          <option value="ensemble">Ensemble (parallel + judge)</option>
         </select>
       </div>
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding-bottom:2px" title="Give agents write access to the working dir (slower — they create real files)">
