@@ -245,6 +245,19 @@ describe("dashboard server endpoints", () => {
     expect(r.status).toBe(404);
   });
 
+  it("POST /api/task/cancel returns 404 when no task is running", async () => {
+    const r = await post("/api/task/cancel", {});
+    expect(r.status).toBe(404);
+  });
+
+  it("dashboard HTML contains the cancel button", async () => {
+    const r = await get("/");
+    expect(r.status).toBe(200);
+    expect(r.body).toContain('id="task-cancel"');
+    expect(r.body).toContain("/api/task/cancel");
+  });
+  });
+
   it("POST /api/task/answer rejects missing fields with 400", async () => {
     const r = await post("/api/task/answer", {});
     expect(r.status).toBe(400);

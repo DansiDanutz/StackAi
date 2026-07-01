@@ -75,6 +75,8 @@ export const dashboardHtml = `<!DOCTYPE html>
   .compose button.run:disabled { opacity:.5; cursor:not-allowed; }
   .compose button.attach { background:transparent; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:9px 16px; font-size:14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
   .compose button.attach:hover { border-color:var(--accent); color:var(--accent); }
+  .compose button.cancel { background:transparent; color:var(--red); border:1px solid var(--red); border-radius:8px; padding:9px 16px; font-size:14px; cursor:pointer; }
+  .compose button.cancel:hover { background:rgba(248,113,113,.15); }
   .compose .hint { font-size:12px; color:var(--dim); margin-top:8px; }
   /* Attachments — drag-drop zone + file chips */
   .compose.drag-over { border-color:var(--accent); box-shadow:0 0 0 3px rgba(96,165,250,.2); }
@@ -158,6 +160,7 @@ export const dashboardHtml = `<!DOCTYPE html>
       <input type="file" id="file-input" multiple style="display:none">
       <button class="attach" id="attach-btn" title="Attach files or images">📎 Attach</button>
       <button class="run" id="task-run">Run task ▸</button>
+      <button class="cancel" id="task-cancel" style="display:none" title="Cancel the running task">✕ Cancel</button>
     </div>
     <div class="hint" id="task-hint">Press <b>⌘↵</b> to run, or click <b>📎 Attach</b> to add files/images. The task runs through 6 phases (Planning → Delivered) — watch it live in the <b>Conversation</b> tab.</div>
   </div>
@@ -344,6 +347,7 @@ async function submitTask() {
   const btn = $('task-run');
   const hint = $('task-hint');
   btn.disabled = true; btn.textContent = 'Starting…';
+  const cancelBtn = $('task-cancel'); if (cancelBtn) cancelBtn.style.display = 'inline-block';
   hint.innerHTML = 'Submitting task to the orchestrator…';
   try {
     const r = await fetch(API+'/api/task', {
@@ -372,9 +376,20 @@ async function submitTask() {
     hint.innerHTML = '<span style="color:var(--red)">Failed to start: '+esc(e.message)+'</span>';
   } finally {
     btn.disabled = false; btn.textContent = 'Run task ▸';
+    if (cancelBtn) cancelBtn.style.display = 'none';
   }
 }
 $('task-run').onclick = submitTask;
+$('task-cancel').onclick = async () => {
+  try {
+    const r = await fetch(API+'/api/task/cancel', { method:'POST' });
+    const d = await r.json();
+    if (!r.ok) { $('task-hint').innerHTML = '<span style="color:var(--red)">'+esc(d.error||'cancel failed')+'</span>'; return; }
+    $('task-hint').innerHTML = '<span style="color:var(--yellow)">Task cancelled.</span>';
+    const btn = $('task-run'); btn.disabled = false; btn.textContent = 'Run task ▸';
+    $('task-cancel').style.display = 'none';
+  } catch(e) { $('task-hint').innerHTML = '<span style="color:var(--red)">Cancel failed: '+esc(e.message)+'</span>'; }
+};
 $('task-input').addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submitTask(); }
 });

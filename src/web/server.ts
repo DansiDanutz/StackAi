@@ -137,14 +137,14 @@ export function startServer(opts: ServerOptions = {}): http.Server {
             task,
             agents: parsed.agents,
             maxLoops: parsed.maxLoops,
-            // Optional full-auto: agents get write access to the cwd. Off by
-            // default because full-auto makes codex/claude do real file I/O
-            // (slow); the default cautious posture returns code as text fast.
             posture: parsed.fullAuto ? "full-auto" : undefined,
             cwd: parsed.cwd,
             onEvent,
           });
-          void orchestrator.run().catch((e) => broadcast("error", { message: (e as Error).message }));
+          activeOrchestrator = orchestrator;
+          void orchestrator.run()
+            .catch((e) => broadcast("error", { message: (e as Error).message }))
+            .finally(() => { if (activeOrchestrator === orchestrator) activeOrchestrator = null; });
         };
 
         if (engine === "fast") {
@@ -193,6 +193,16 @@ export function startServer(opts: ServerOptions = {}): http.Server {
         pendingClarify = null;
         pending.resolve(parsed.answers);
         broadcast("conversation", { phase: "planning", fromAgent: "clarifier", content: "Answers received. Locking decisions and starting orchestration." });
+        return json(res, { ok: true });
+      }
+
+      // ---- POST: cancel the active task (stops a runaway / stuck run) ----
+      if (req.method === "POST" && path === "/api/task/cancel") {
+        if (!activeOrchestrator) return json(res, { error: "no active task to cancel" }, 404);
+        activeOrchestrator.cancel();
+        broadcast("conversation", { phase: "delivered", fromAgent: "orchestrator", content: "[cancelled] Task cancelled by user" });
+        broadcast("done", { status: "cancelled", finalOutput: "" });
+        activeOrchestrator = null;
         return json(res, { ok: true });
       }
 
@@ -342,6 +352,11 @@ interface PendingClarify {
   resolve: (answers: Record<string, string>) => void;
 }
 let pendingClarify: PendingClarify | null = null;
+
+// ── Active orchestrators (for run cancellation) ─────────────────────────────
+// Tracks the orchestrator for the most recent task so POST /api/task/cancel
+// can abort it. Single-user daemon → one active task at a time.
+let activeOrchestrator: { cancel: () => void } | null = null;
 
 /** Broadcast a JSON event to all connected dashboard clients. */
 export function broadcast(type: string, data: unknown): void {

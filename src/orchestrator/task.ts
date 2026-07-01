@@ -110,6 +110,10 @@ export class TaskOrchestrator {
   private phases: TaskPhaseRecord[] = [];
   /** Last agent-reported error, carried into the final delivery summary. */
   private lastError: string | undefined;
+  /** The active scheduler handle — kept so cancel() can abort it. */
+  private currentHandle: { cancel: () => void } | undefined;
+  /** Whether this run was cancelled by the user. */
+  private cancelled = false;
 
   constructor(
     private registry: AdapterRegistry,
@@ -142,9 +146,11 @@ export class TaskOrchestrator {
       // ── Phase 1: PLANNING ──
       await this.enterPhase("planning");
       const plan = await this.runPhase("planning", team.planner, task, "", runId, 0);
+      if (this.cancelled) { status = "failed"; this.lastError = "cancelled by user"; await this.finish(runId, status, iterations, start); return this.result(runId, status, iterations, verdict, start); }
       if (!plan) { status = "failed"; await this.finish(runId, status, iterations, start); return this.result(runId, status, iterations, verdict, start); }
 
       // ── Phase 2: ORCHESTRATING ──
+      if (this.cancelled) { status = "failed"; this.lastError = "cancelled by user"; await this.finish(runId, status, iterations, start); return this.result(runId, status, iterations, verdict, start); }
       await this.enterPhase("orchestrating");
       const orchestration = await this.runPhase("orchestrating", team.orchestrator, task, plan, runId, 0);
       const priorForCoder = `PLAN:\n${plan}\n\nORCHESTRATION:\n${orchestration || "(use defaults)"}`;
@@ -285,10 +291,18 @@ export class TaskOrchestrator {
     return output;
   }
 
-  /** Submit one attempt; return the RunResult. */
+  /** Cancel the run — aborts the current agent and stops the orchestrator. */
+  cancel(): void {
+    this.cancelled = true;
+    this.currentHandle?.cancel();
+    this.opts.onEvent?.({ kind: "message", message: { phase: "delivered", fromAgent: "orchestrator", content: "[cancelled] Task cancelled by user", ts: new Date().toISOString() } });
+  }
+
+  /** Submit one attempt; return the RunResult. Tracks the handle for cancellation. */
   private async tryOnce(adapter: AgentAdapter, req: RunRequest, phase: Phase): Promise<RunResult> {
     const h = this.scheduler.submit(adapter, this.router, req, (a, evt) =>
       this.opts.onAgentEvent?.(phase, a, evt));
+    this.currentHandle = h;
     return h.done;
   }
 
