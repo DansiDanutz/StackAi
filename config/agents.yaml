@@ -1,14 +1,14 @@
 agents:
-- command: /Users/davidai/.local/bin/claude
-  defaultModel: sonnet
-  enabled: true
-  name: claude
 - command: /Users/davidai/.npm-global/bin/codex
   defaultModel: auto
   enabled: true
   name: codex
   prefixArgs:
   - exec
+- command: /Users/davidai/.local/bin/claude
+  defaultModel: sonnet
+  enabled: true
+  name: claude
 - command: /Users/davidai/.npm-global/bin/opencode
   defaultModel: sonnet
   enabled: true
