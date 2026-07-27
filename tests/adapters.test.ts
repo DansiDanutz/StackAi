@@ -66,6 +66,18 @@ describe("CodexAdapter buildCommand", () => {
     const { args } = a.buildCommand({ agent: "codex", prompt: "x", posture: "full-auto" }, noopRouter);
     expect(args).toContain("--dangerously-bypass-approvals-and-sandbox");
   });
+  it("preserves final text from legacy turn_completed events", () => {
+    expect(a.parseEvent({
+      type: "turn_completed",
+      text: "finished result",
+      session_id: "session-1",
+    })).toEqual({
+      type: "done",
+      exitCode: 0,
+      finalText: "finished result",
+      sessionId: "session-1",
+    });
+  });
 });
 
 describe("GeminiAdapter buildCommand (gotcha: -p is prompt)", () => {

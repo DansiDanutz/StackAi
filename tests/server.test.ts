@@ -46,12 +46,18 @@ async function get(path: string): Promise<any> {
   });
 }
 
-async function post(path: string, payload: any): Promise<any> {
+async function post(path: string, payload: any, headers: Record<string, string> = {}): Promise<any> {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(payload);
+    const requestHeaders: Record<string, string | number> = {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(data),
+      ...headers,
+    };
+    if (headers["Transfer-Encoding"]) delete requestHeaders["Content-Length"];
     const req = http.request(`http://127.0.0.1:${port}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) },
+      headers: requestHeaders,
     }, (res) => {
       let body = "";
       res.on("data", (c) => (body += c));
@@ -132,6 +138,36 @@ describe("dashboard server endpoints", () => {
     const r = await post("/api/events", { type: "phase", data: { phase: "planning" } });
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
+  });
+
+  it("rejects state-changing requests from a foreign browser origin", async () => {
+    const r = await post(
+      "/api/task",
+      { task: "run from a hostile website", fullAuto: true },
+      { Origin: "https://attacker.example" },
+    );
+    expect(r.status).toBe(403);
+    expect(r.body.error).toMatch(/origin/i);
+  });
+
+  it("allows state-changing requests from the dashboard origin", async () => {
+    const r = await post(
+      "/api/events",
+      { type: "phase", data: { phase: "planning" } },
+      { Origin: `http://127.0.0.1:${port}` },
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+  });
+
+  it("rejects streamed request bodies above the endpoint limit", async () => {
+    const r = await post(
+      "/api/events",
+      { type: "phase", data: "x".repeat(1024 * 1024) },
+      { "Transfer-Encoding": "chunked" },
+    );
+    expect(r.status).toBe(413);
+    expect(r.body.error).toMatch(/large/i);
   });
 
   it("POST /api/events rejects invalid JSON body gracefully", async () => {

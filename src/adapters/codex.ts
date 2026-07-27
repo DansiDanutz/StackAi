@@ -155,7 +155,6 @@ export class CodexAdapter extends BaseAdapter {
       }
 
       case "turn.completed":
-      case "turn_completed":
         return { type: "done", exitCode: 0, finalText: "" };
 
       case "token_count":
