@@ -9,9 +9,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runSolo } from "../src/patterns/solo.js";
-import { runPipeline } from "../src/patterns/pipeline.js";
-import { runEnsemble } from "../src/patterns/ensemble.js";
 import { Scheduler } from "../src/kernel/scheduler.js";
 import { defaultPolicy } from "../src/safety/policy.js";
 import { MockAdapter, streamedTextEvents, mockRouter } from "./_mock.js";
@@ -19,6 +16,9 @@ import { MockAdapter, streamedTextEvents, mockRouter } from "./_mock.js";
 const TMP = mkdtempSync(join(tmpdir(), "sao-patterns-"));
 process.env.STACKAI_DATA_DIR = TMP;
 process.env.STACKAI_CONFIG_DIR = TMP;
+const { runSolo } = await import("../src/patterns/solo.js");
+const { runPipeline } = await import("../src/patterns/pipeline.js");
+const { runEnsemble } = await import("../src/patterns/ensemble.js");
 afterAll(() => { try { rmSync(TMP, { recursive: true, force: true }); } catch { /* ignore */ } });
 
 describe("solo pattern (mock adapter)", () => {

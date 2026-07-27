@@ -40,6 +40,11 @@ export interface ServerOptions {
   host?: string;
 }
 
+const DEFAULT_BODY_LIMIT = 1024 * 1024;
+const UPLOAD_BODY_LIMIT = 65 * 1024 * 1024;
+
+class PayloadTooLargeError extends Error {}
+
 export function startServer(opts: ServerOptions = {}): http.Server {
   const port = opts.port ?? resolvePort("dashboard");
   const host = opts.host ?? "127.0.0.1";
@@ -49,6 +54,9 @@ export function startServer(opts: ServerOptions = {}): http.Server {
     const path = url.pathname;
 
     try {
+      if (!hasAllowedBrowserOrigin(req)) {
+        return json(res, { error: "cross-origin request rejected" }, 403);
+      }
       // ---- POST: event ingest (CLI orchestrator → daemon → WS broadcast) ----
       if (req.method === "POST" && path === "/api/events") {
         const body = await readBody(req);
@@ -67,7 +75,7 @@ export function startServer(opts: ServerOptions = {}): http.Server {
       // is then passed to POST /api/task, which injects it into the prompt so
       // every agent (codex/claude/gemini) can read the file from disk.
       if (req.method === "POST" && path === "/api/upload") {
-        const body = await readBody(req);
+        const body = await readBody(req, UPLOAD_BODY_LIMIT);
         let parsed: { name?: string; type?: string; data?: string };
         try { parsed = JSON.parse(body); } catch { return json(res, { error: "invalid JSON" }, 400); }
         const name = (parsed.name ?? "").trim();
@@ -328,6 +336,9 @@ export function startServer(opts: ServerOptions = {}): http.Server {
 
       return json(res, { error: "not found", path }, 404);
     } catch (e) {
+      if (e instanceof PayloadTooLargeError) {
+        return json(res, { error: "request body too large" }, 413);
+      }
       return json(res, { error: (e as Error).message }, 500);
     }
   });
@@ -335,7 +346,7 @@ export function startServer(opts: ServerOptions = {}): http.Server {
   // ---- WebSocket upgrade for live events ----
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", `http://${host}`);
-    if (url.pathname !== "/ws") {
+    if (url.pathname !== "/ws" || !hasAllowedBrowserOrigin(req)) {
       socket.destroy();
       return;
     }
@@ -411,19 +422,50 @@ function wsFrame(payload: string): Buffer {
 function json(res: http.ServerResponse, body: unknown, status = 200): void {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
   });
   res.end(JSON.stringify(body));
 }
 
-/** Read the full request body (for POST /api/events). */
-function readBody(req: http.IncomingMessage): Promise<string> {
+/** Read a request body without allowing unbounded daemon memory growth. */
+function readBody(req: http.IncomingMessage, limit = DEFAULT_BODY_LIMIT): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
+    let size = 0;
+    let rejected = false;
+    const declared = Number(req.headers["content-length"] ?? 0);
+    if (Number.isFinite(declared) && declared > limit) {
+      req.resume();
+      reject(new PayloadTooLargeError());
+      return;
+    }
+    req.on("data", (c: Buffer) => {
+      if (rejected) return;
+      size += c.length;
+      if (size > limit) {
+        rejected = true;
+        reject(new PayloadTooLargeError());
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
+}
+
+function hasAllowedBrowserOrigin(req: http.IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    if (parsed.origin === dashboardTailscaleUrl()) return true;
+    const loopback = parsed.hostname === "127.0.0.1" ||
+      parsed.hostname === "localhost" || parsed.hostname === "[::1]";
+    const originPort = Number(parsed.port || (parsed.protocol === "http:" ? 80 : 443));
+    return parsed.protocol === "http:" && loopback && originPort === req.socket.localPort;
+  } catch {
+    return false;
+  }
 }
 
 /**
