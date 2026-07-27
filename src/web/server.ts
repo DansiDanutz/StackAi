@@ -456,10 +456,13 @@ function readBody(req: http.IncomingMessage, limit = DEFAULT_BODY_LIMIT): Promis
 function hasAllowedBrowserOrigin(req: http.IncomingMessage): boolean {
   const origin = req.headers.origin;
   if (!origin) return true;
-  const host = req.headers.host;
-  if (!host) return false;
   try {
-    return new URL(origin).host === host;
+    const parsed = new URL(origin);
+    if (parsed.origin === dashboardTailscaleUrl()) return true;
+    const loopback = parsed.hostname === "127.0.0.1" ||
+      parsed.hostname === "localhost" || parsed.hostname === "[::1]";
+    const originPort = Number(parsed.port || (parsed.protocol === "http:" ? 80 : 443));
+    return parsed.protocol === "http:" && loopback && originPort === req.socket.localPort;
   } catch {
     return false;
   }

@@ -144,7 +144,10 @@ describe("dashboard server endpoints", () => {
     const r = await post(
       "/api/task",
       { task: "run from a hostile website", fullAuto: true },
-      { Origin: "https://attacker.example" },
+      {
+        Host: `attacker.example:${port}`,
+        Origin: `http://attacker.example:${port}`,
+      },
     );
     expect(r.status).toBe(403);
     expect(r.body.error).toMatch(/origin/i);
@@ -155,6 +158,16 @@ describe("dashboard server endpoints", () => {
       "/api/events",
       { type: "phase", data: { phase: "planning" } },
       { Origin: `http://127.0.0.1:${port}` },
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+  });
+
+  it("allows state-changing requests from the fixed tailnet dashboard origin", async () => {
+    const r = await post(
+      "/api/events",
+      { type: "phase", data: { phase: "planning" } },
+      { Origin: "https://dans-mac-studio.tailc56ca0.ts.net" },
     );
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
